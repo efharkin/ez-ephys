@@ -268,7 +268,7 @@ class Recording(np.ndarray):
         delta_I_ss = I_test - I_baseline
         
         R_input = 1000 * delta_V_ss / delta_I_ss
-        output['R_input'] = R_input
+        output['R_input'] = np.array(R_input)
         
         # Calculate R_a.
         if kwargs['V_clamp']:
@@ -283,11 +283,16 @@ class Recording(np.ndarray):
                               :].max(axis = 0)
             
             R_a = 1000 * delta_V_ss / (I_peak - I_baseline)
-            output['R_a'] = R_a
+            output['R_a'] = np.array(R_a)
             
         
         # Optionally, print results.
         if kwargs['verbose']:
+            
+            """Crashes in python3 because round isn't defined for ce.Recording
+            class.
+            """
+            
             print('\n\n### Test-pulse results ###')
             print('R_in: {} +/- {} MOhm'.format(round(R_input.mean(), 1), 
                   round(R_input.std())))
