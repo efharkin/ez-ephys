@@ -112,8 +112,9 @@ class Cell(object):
             no_samples = len(sweeps[0].analogsignals[0])
             no_sweeps = len(sweeps)
             
-            sweeps_arr = Recording((no_channels, no_samples, no_sweeps),
-                                   dtype = np.float64)
+            sweeps_arr = Recording(np.empty(
+                    (no_channels, no_samples, no_sweeps),
+                    dtype = np.float64))
             
             # Fill the array one sweep at a time.
             for sweep_ind in range(no_sweeps):
@@ -143,6 +144,25 @@ class Recording(np.ndarray):
         plot
         fit_test_pulse
     """
+    
+    def __new__(cls, input_array):
+        
+        """Instantiate new Recording given an array of data.
+        
+        Allows new Recording objects to be created using np.array-type syntax;
+        i.e., by passing Recording a nested list or existing np.array.
+        """
+        
+        # Convert input_array to a np.ndarray, and subsequently to a Recording.
+        obj = np.asarray(input_array).view(cls)
+        
+        # Check that newly-created recording has correct ndim.
+        if obj.ndim != 3:
+            raise ValueError('Recording dimensionality must be '
+                             '[channel, time, sweep].')
+        
+        return obj
+    
     
     def plot(self, single_sweep = False, downsample = 10):
         
