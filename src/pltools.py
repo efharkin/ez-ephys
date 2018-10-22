@@ -7,8 +7,9 @@ import numpy as np
 
 # Function to make a set of scalebars for a mpl plot
 def add_scalebar(x_units = None, y_units = None, anchor = (0.98, 0.02),
-text_spacing = (0.02, 0.02), bar_spacing = 0.06, linewidth = 5,
-remove_frame = True, omit_x = False, omit_y = False, ax = None):
+x_size = None, y_size = None, y_label_space = 0.02, x_label_space = -0.02,
+bar_space = 0.06, x_on_left = True, linewidth = 3, remove_frame = True,
+omit_x = False, omit_y = False, round = True, usetex = True, ax = None):
 
     """
     Automagically add a set of x and y scalebars to a matplotlib plot
@@ -22,10 +23,16 @@ remove_frame = True, omit_x = False, omit_y = False, ax = None):
         anchor: tuple of floats
         --  bottom right of the bbox (in axis coordinates)
 
+        x_size: float or None
+        --  Manually set size of x scalebar (or None for automatic sizing)
+
+        y_size: float or None
+        --  Manually set size of y scalebar (or None for automatic sizing)
+
         text_spacing: tuple of floats
         --  amount to offset labels from respective scalebars (in axis units)
 
-        bar_spacing: float
+        bar_space: float
         --  amount to separate bars from eachother (in axis units)
 
         linewidth: numeric
@@ -37,12 +44,14 @@ remove_frame = True, omit_x = False, omit_y = False, ax = None):
         omit_x/omit_y: bool (default False)
         --  skip drawing the x/y scalebar
 
+        round: bool (default True)
+        --  round units to the nearest integer
+
         ax: matplotlib.axes object
         --  manually specify the axes object to which the scalebar should be added
     """
 
     # Basic input processing.
-    text_spacer_point = (anchor[0] - text_spacing[0], anchor[1] + text_spacing[1])
 
     if ax is None:
         ax = plt.gca()
@@ -54,48 +63,92 @@ remove_frame = True, omit_x = False, omit_y = False, ax = None):
 
     # Do y scalebar.
     if not omit_y:
-        y_span = ax.get_yticks()[:2]
-        y_length = y_span[1] - y_span[0]
-        y_span_ax = ax.transLimits.transform(np.array([[0, 0], y_span]).T)[:, 1]
+
+        if y_size is None:
+            y_span = ax.get_yticks()[:2]
+            y_length = y_span[1] - y_span[0]
+            y_span_ax = ax.transLimits.transform(np.array([[0, 0], y_span]).T)[:, 1]
+        else:
+            y_length = y_size
+            y_span_ax = ax.transLimits.transform(np.array([[0, 0], [0, y_size]]))[:, 1]
         y_length_ax = y_span_ax[1] - y_span_ax[0]
 
+        if round:
+            y_length = int(np.round(y_length))
+
         # y-scalebar label
+
+        if y_label_space <= 0:
+            horizontalalignment = 'left'
+        else:
+            horizontalalignment = 'right'
+
+        if usetex:
+            y_label_text = '${}${}'.format(y_length, y_units)
+        else:
+            y_label_text = '{}{}'.format(y_length, y_units)
+
         ax.text(
-        text_spacer_point[0], anchor[1] + y_length_ax / 2 + bar_spacing,
-        '{}{}'.format(y_length, y_units),
-        verticalalignment = 'center', horizontalalignment = 'right',
-        transform = ax.transAxes
+        anchor[0] - y_label_space, anchor[1] + y_length_ax / 2 + bar_space,
+        y_label_text,
+        verticalalignment = 'center', horizontalalignment = horizontalalignment,
+        size = 'small', transform = ax.transAxes
         )
 
         # y scalebar
         ax.plot(
         [anchor[0], anchor[0]],
-        [anchor[1] + bar_spacing, anchor[1] + y_length_ax + bar_spacing],
+        [anchor[1] + bar_space, anchor[1] + y_length_ax + bar_space],
         'k-', linewidth = linewidth,
-        transform = ax.transAxes
+        clip_on = False, transform = ax.transAxes
         )
 
     # Do x scalebar.
     if not omit_x:
-        x_span = ax.get_xticks()[:2]
-        x_length = x_span[1] - x_span[0]
-        x_span_ax = ax.transLimits.transform(np.array([x_span, [0, 0]]).T)[:, 0]
+
+        if x_size is None:
+            x_span = ax.get_xticks()[:2]
+            x_length = x_span[1] - x_span[0]
+            x_span_ax = ax.transLimits.transform(np.array([x_span, [0, 0]]).T)[:, 0]
+        else:
+            x_length = x_size
+            x_span_ax = ax.transLimits.transform(np.array([[0, 0], [x_size, 0]]))[:, 0]
         x_length_ax = x_span_ax[1] - x_span_ax[0]
 
+        if round:
+            x_length = int(np.round(x_length))
+
         # x-scalebar label
+        if x_label_space <= 0:
+            verticalalignment = 'top'
+        else:
+            verticalalignment = 'bottom'
+
+        if x_on_left:
+            Xx_text_coord = anchor[0] - x_length_ax / 2 - bar_space
+            Xx_bar_coords = [anchor[0] - x_length_ax - bar_space, anchor[0] - bar_space]
+        else:
+            Xx_text_coord = anchor[0] + x_length_ax / 2 + bar_space
+            Xx_bar_coords = [anchor[0] + x_length_ax + bar_space, anchor[0] + bar_space]
+
+        if usetex:
+            x_label_text = '${}${}'.format(x_length, x_units)
+        else:
+            x_label_text = '{}{}'.format(x_length, x_units)
+
         ax.text(
-        anchor[0] - x_length_ax / 2 - bar_spacing, text_spacer_point[1],
-        '{}{}'.format(x_length, x_units),
-        verticalalignment = 'bottom', horizontalalignment = 'center',
-        transform = ax.transAxes
+        Xx_text_coord, anchor[1] + x_label_space,
+        x_label_text,
+        verticalalignment = verticalalignment, horizontalalignment = 'center',
+        size = 'small', transform = ax.transAxes
         )
 
         # x scalebar
         ax.plot(
-        [anchor[0] - x_length_ax - bar_spacing, anchor[0] - bar_spacing],
+        Xx_bar_coords,
         [anchor[1], anchor[1]],
         'k-', linewidth = linewidth,
-        transform = ax.transAxes
+        clip_on = False, transform = ax.transAxes
         )
 
     if remove_frame:
