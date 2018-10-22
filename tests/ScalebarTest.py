@@ -9,7 +9,7 @@ from cell_class import Cell
 
 #%% LOAD TEST RECORDING
 
-TEST_REC_PATH = './tests/17n28000.abf'
+TEST_REC_PATH = './tests/example-data/17n28000.abf'
 test_rec = Cell().read_ABF(TEST_REC_PATH)[0]
 test_rec.plot()
 
