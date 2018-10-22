@@ -197,3 +197,25 @@ def hide_border(sides = 'a', ax = None):
             continue
         else:
             ax.spines[side].set_visible(False)
+
+
+def p_to_string(p):
+
+    """
+    Takes a p-value and converts it to a pretty LaTeX string.
+
+    p is presented to three decimal places if p >= 0.05, and as p < 0.05/0.01/0.001 otherwise.
+    """
+
+    p_rounded = np.round(p, 3)
+
+    if p_rounded >= 0.05:
+        p_str = '$p = {}$'.format(p_rounded)
+    elif p_rounded < 0.05 and p_rounded >= 0.01:
+        p_str = '$p < 0.05$'
+    elif p_rounded < 0.01 and p_rounded >= 0.001:
+        p_str = '$p < 0.01$'
+    else:
+        p_str = '$p < 0.001$'
+
+    return p_str
