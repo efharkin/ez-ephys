@@ -1,56 +1,44 @@
-#%% IMPORT MODULES
+# IMPORT MODULES
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-#%% DEFINE HANDY TOOLS
+# DEFINE HANDY TOOLS
 
 # Function to make a set of scalebars for a mpl plot
-def add_scalebar(x_units = None, y_units = None, anchor = (0.98, 0.02),
-x_size = None, y_size = None, y_label_space = 0.02, x_label_space = -0.02,
-bar_space = 0.06, x_on_left = True, linewidth = 3, remove_frame = True,
-omit_x = False, omit_y = False, round = True, usetex = True, ax = None):
 
-    """
-    Automagically add a set of x and y scalebars to a matplotlib plot
 
-    Inputs:
+def add_scalebar(x_units=None, y_units=None, anchor=(0.98, 0.02),
+                 x_size=None, y_size=None, y_label_space=0.02, x_label_space=-0.02,
+                 bar_space=0.06, x_on_left=True, linewidth=3, remove_frame=True,
+                 omit_x=False, omit_y=False, round=True, usetex=True, ax=None):
+    """Automagically add a set of x and y scalebars to a matplotlib plot.
 
+    Arguments
+    ---------
         x_units: str or None
-
         y_units: str or None
-
         anchor: tuple of floats
         --  bottom right of the bbox (in axis coordinates)
-
         x_size: float or None
         --  Manually set size of x scalebar (or None for automatic sizing)
-
         y_size: float or None
         --  Manually set size of y scalebar (or None for automatic sizing)
-
         text_spacing: tuple of floats
         --  amount to offset labels from respective scalebars (in axis units)
-
         bar_space: float
         --  amount to separate bars from eachother (in axis units)
-
         linewidth: numeric
         --  thickness of the scalebars
-
         remove_frame: bool (default False)
         --  remove the bounding box, axis ticks, etc.
-
         omit_x/omit_y: bool (default False)
         --  skip drawing the x/y scalebar
-
         round: bool (default True)
         --  round units to the nearest integer
-
         ax: matplotlib.axes object
         --  manually specify the axes object to which the scalebar should be added
     """
-
     # Basic input processing.
 
     if ax is None:
@@ -67,10 +55,12 @@ omit_x = False, omit_y = False, round = True, usetex = True, ax = None):
         if y_size is None:
             y_span = ax.get_yticks()[:2]
             y_length = y_span[1] - y_span[0]
-            y_span_ax = ax.transLimits.transform(np.array([[0, 0], y_span]).T)[:, 1]
+            y_span_ax = ax.transLimits.transform(
+                np.array([[0, 0], y_span]).T)[:, 1]
         else:
             y_length = y_size
-            y_span_ax = ax.transLimits.transform(np.array([[0, 0], [0, y_size]]))[:, 1]
+            y_span_ax = ax.transLimits.transform(
+                np.array([[0, 0], [0, y_size]]))[:, 1]
         y_length_ax = y_span_ax[1] - y_span_ax[0]
 
         if round:
@@ -89,18 +79,18 @@ omit_x = False, omit_y = False, round = True, usetex = True, ax = None):
             y_label_text = '{}{}'.format(y_length, y_units)
 
         ax.text(
-        anchor[0] - y_label_space, anchor[1] + y_length_ax / 2 + bar_space,
-        y_label_text,
-        verticalalignment = 'center', horizontalalignment = horizontalalignment,
-        size = 'small', transform = ax.transAxes
+            anchor[0] - y_label_space, anchor[1] + y_length_ax / 2 + bar_space,
+            y_label_text,
+            verticalalignment='center', horizontalalignment=horizontalalignment,
+            size='small', transform=ax.transAxes
         )
 
         # y scalebar
         ax.plot(
-        [anchor[0], anchor[0]],
-        [anchor[1] + bar_space, anchor[1] + y_length_ax + bar_space],
-        'k-', linewidth = linewidth,
-        clip_on = False, transform = ax.transAxes
+            [anchor[0], anchor[0]],
+            [anchor[1] + bar_space, anchor[1] + y_length_ax + bar_space],
+            'k-', linewidth=linewidth,
+            clip_on=False, transform=ax.transAxes
         )
 
     # Do x scalebar.
@@ -109,10 +99,12 @@ omit_x = False, omit_y = False, round = True, usetex = True, ax = None):
         if x_size is None:
             x_span = ax.get_xticks()[:2]
             x_length = x_span[1] - x_span[0]
-            x_span_ax = ax.transLimits.transform(np.array([x_span, [0, 0]]).T)[:, 0]
+            x_span_ax = ax.transLimits.transform(
+                np.array([x_span, [0, 0]]).T)[:, 0]
         else:
             x_length = x_size
-            x_span_ax = ax.transLimits.transform(np.array([[0, 0], [x_size, 0]]))[:, 0]
+            x_span_ax = ax.transLimits.transform(
+                np.array([[0, 0], [x_size, 0]]))[:, 0]
         x_length_ax = x_span_ax[1] - x_span_ax[0]
 
         if round:
@@ -126,10 +118,14 @@ omit_x = False, omit_y = False, round = True, usetex = True, ax = None):
 
         if x_on_left:
             Xx_text_coord = anchor[0] - x_length_ax / 2 - bar_space
-            Xx_bar_coords = [anchor[0] - x_length_ax - bar_space, anchor[0] - bar_space]
+            Xx_bar_coords = [
+                anchor[0] - x_length_ax - bar_space,
+                anchor[0] - bar_space]
         else:
             Xx_text_coord = anchor[0] + x_length_ax / 2 + bar_space
-            Xx_bar_coords = [anchor[0] + x_length_ax + bar_space, anchor[0] + bar_space]
+            Xx_bar_coords = [
+                anchor[0] + x_length_ax + bar_space,
+                anchor[0] + bar_space]
 
         if usetex:
             x_label_text = '${}${}'.format(x_length, x_units)
@@ -137,30 +133,32 @@ omit_x = False, omit_y = False, round = True, usetex = True, ax = None):
             x_label_text = '{}{}'.format(x_length, x_units)
 
         ax.text(
-        Xx_text_coord, anchor[1] + x_label_space,
-        x_label_text,
-        verticalalignment = verticalalignment, horizontalalignment = 'center',
-        size = 'small', transform = ax.transAxes
+            Xx_text_coord, anchor[1] + x_label_space,
+            x_label_text,
+            verticalalignment=verticalalignment, horizontalalignment='center',
+            size='small', transform=ax.transAxes
         )
 
         # x scalebar
         ax.plot(
-        Xx_bar_coords,
-        [anchor[1], anchor[1]],
-        'k-', linewidth = linewidth,
-        clip_on = False, transform = ax.transAxes
+            Xx_bar_coords,
+            [anchor[1], anchor[1]],
+            'k-', linewidth=linewidth,
+            clip_on=False, transform=ax.transAxes
         )
 
     if remove_frame:
         ax.axis('off')
 
 
-def hide_ticks(ax = None):
+def hide_ticks(ax=None):
+    """Remove x and y ticks from axes object.
 
+    Arguments
+    ---------
+        ax: matplotlib.axes or None
+        --  Defaults to the current axes if set to `None`.
     """
-    Delete the x and y ticks of the specified axes. If no axes object is provided, defaults to the current axes.
-    """
-
     if ax is None:
         ax = plt.gca()
 
@@ -168,15 +166,22 @@ def hide_ticks(ax = None):
     ax.set_yticks([])
 
 
-def hide_border(sides = 'a', ax = None):
+def hide_border(sides='a', ax=None):
+    """Remove specified borders from axes object.
+
+    Arguments
+    ---------
+        sides: str
+        --  Set to `a` for all sides, or one of `rltb` for right, left, etc.
+        ax: matplotlib.axes or None
+        --  Defaults to the current axes if set to `None`.
 
     """
-    Sides should be set to `a` for all, or a string containing `r/l/t/b` as needed.
-    """
-
     # Check for correct input
     if not any([letter in sides for letter in 'arltb']):
-        raise ValueError('sides should be passed a string with `a` for all sides, or r/l/t/b as-needed for other sides.')
+        raise ValueError(
+            'sides should be passed a string with `a` for all sides, '
+            'or r/l/t/b as-needed for other sides.')
 
     if ax is None:
         ax = plt.gca()
@@ -185,10 +190,10 @@ def hide_border(sides = 'a', ax = None):
         sides = 'rltb'
 
     sidekeys = {
-    'r': 'right',
-    'l': 'left',
-    't': 'top',
-    'b': 'bottom'
+        'r': 'right',
+        'l': 'left',
+        't': 'top',
+        'b': 'bottom'
     }
 
     for key, side in sidekeys.iteritems():
@@ -200,13 +205,20 @@ def hide_border(sides = 'a', ax = None):
 
 
 def p_to_string(p):
+    """Convert p-value to pretty latex string.
 
+    p is presented to three decimal places if p >= 0.05, and as
+    p < 0.05/0.01/0.001 otherwise.
+
+    Arguments
+    ---------
+        p: float
+        --  p-value to format.
+
+    Returns
+    -------
+        p-value formatted as a string.
     """
-    Takes a p-value and converts it to a pretty LaTeX string.
-
-    p is presented to three decimal places if p >= 0.05, and as p < 0.05/0.01/0.001 otherwise.
-    """
-
     p_rounded = np.round(p, 3)
 
     if p_rounded >= 0.05:
