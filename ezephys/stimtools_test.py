@@ -3,7 +3,7 @@
 import os
 import tempfile
 
-import stimtools
+from ezephys import stimtools
 
 
 # INITIALIZE A SET OF STIMULATIONS

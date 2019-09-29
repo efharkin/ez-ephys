@@ -1,14 +1,16 @@
 # IMPORT MODULES
 
+import os
+
 import matplotlib.pyplot as plt
 
-from rectools import Cell
-import pltools
+from ezephys.rectools import Cell
+from ezephys import pltools
 
 
 # LOAD TEST RECORDING
 
-TEST_REC_PATH = './tests/example-data/17n28000.abf'
+TEST_REC_PATH = os.path.join('test_data', '17n28000.abf')
 test_rec = Cell().read_ABF(TEST_REC_PATH)[0]
 test_rec.plot()
 
@@ -29,6 +31,6 @@ plt.plot(test_rec[1, :, :].mean(axis=1), 'k-')
 plt.xlim(1000, 8000)
 
 pltools.add_scalebar(y_units='mV', x_units='ms', anchor=(0.7, 0.15),
-                     text_spacing=(0.007, 0), bar_spacing=0.03, omit_x=True)
+                     y_label_space=0.007, bar_space=0.03, omit_x=True)
 
 plt.show()

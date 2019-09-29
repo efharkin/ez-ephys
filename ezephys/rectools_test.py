@@ -4,7 +4,7 @@ import os
 
 import matplotlib.pyplot as plt
 
-from rectools import Cell
+from ezephys.rectools import Cell
 
 
 # LOAD TEST RECORDING
