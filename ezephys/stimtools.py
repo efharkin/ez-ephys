@@ -1,427 +1,157 @@
-"""
-STIMULUS GENERATOR
-
-Created on Tue Sep  5 10:42:19 2017
+"""Construct complex electrophysiological stimuli.
 
 @author: Emerson
 
-
-Class with built-in methods for generating commonly used stimuli and writing
-them to ATF files for use with AxonInstruments hardware.
-
-Example usage:
-
-    # Initialize the class and simulate a synaptic current.
-    s = Stim('Slow EPSC')
-    s.generate_PS(duration = 200, ampli = 10, tau_rise = 1.5, tau_decay = 15)
-
-    # Display some information about the generated waveform.
-    print(s)
-    s.plot()
-
-    # Create a set of synaptic-like currents of increasing amplitude.
-    s.set_replicates(5)
-    s.command *= np.arange(1, 6)
-    s.plot()
-
-    # Write the stimulus to an ATF file.
-    s.write_ATF()
 """
+
+__all__ = [
+    'BaseStimulus', 'SynapticStimulus', 'OUStimulus', 'SinStimulus',
+    'ChirpStimulus', 'CompoundStimulus', 'concatenate'
+]
 
 # IMPORT MODULES
 
-import types
+import csv
+import warnings
+from copy import deepcopy
 
 import numpy as np
 import numba as nb
 import matplotlib.pyplot as plt
 
 
-# DEFINE MAIN STIM CLASS
+# DEFINE SIMULUS PARENT CLASS
 
-class Stim(object):
-    """Stimulus generating object.
+class BaseStimulus(object):
+    """Base class for stimulus objects."""
 
-    Attributes
-    ----------
-        label           -- string descriptor of the class instance.
-        stim_type       -- string descriptor of the type of stimulus.
-        dt              -- size of the time step in ms.
-        command         -- 2D array containing stimuli; time across rows, sweeps across cols.
-        time            -- time support vector.
-        stim_params     -- object containing attributes for each stim parameter for the current stim_type.
+    def __init__(self):
+        """Initialize BaseStimulus (does nothing)."""
+        pass
 
+    def __add__(self, x):
+        """Add two Stimulus objects."""
+        # Adding is implemented for CompoundStimulus objects,
+        # so coerce self to a CompoundStimulus and add.
+        tmpstimulus = CompoundStimulus(self)
+        return tmpstimulus + x
 
-    Methods
-    -------
-        generate_PS         -- generate a synaptic current/potential-like waveform, with total amplitude defined.
-        generate_PS_bycharge-- generates a synaptic current/potential-like waveform, with total charge defined.
-        generate_OU         -- generate Ornstein-Uhlenbeck noise.
-        set_replicates      -- set the number of replicates of the stimulus.
-        plot                -- plot the stimulus.
-        write_ATF           -- write the stimulus to an ATF file.
-
-
-    Example usage
-    -------------
-
-        Initialize the class and simulate a synaptic current.
-        >>> s = Stim('Slow EPSC')
-        >>> s.generate_PS(duration = 200, ampli = 10, tau_rise = 1.5, tau_decay = 15)
-
-        Display some information about the generated waveform.
-        >>> print(s)
-        >>> s.plot()
-
-        Create a set of synaptic-like currents of increasing amplitude.
-        >>> s.set_replicates(5)
-        >>> s.command *= np.arange(1, 6)
-        >>> s.plot()
-
-        Write the stimulus to an ATF file.
-        >>> s.write_ATF()
-
-    """
-
-    # MAGIC METHODS
-
-    # Initialize class instance.
-    def __init__(self, label, dt=0.1):
-        """Initialize self."""
-        self.label = label
-        self.stim_type = 'Empty'
-
-        self.dt = dt        # Sampling interval in ms.
-
-        # Attribute to hold the command (only current is currently supported).
-        self.command = None
-        self.time = None      # Attribute to hold a time support vector.
-        self.stim_params = None     # Attribute to hold stim parameters for given stim_type
-
-    # Method for unambiguous representation of Stim instance.
-    def __repr__(self):
-        """Return repr(self)."""
-        if self.time is not None:
-            time_range = '[{}, {}]'.format(self.time[0], self.time[-1])
-            command_str = np.array2string(self.command)
+    @property
+    def no_sweeps(self):
+        """Number of stimulus sweeps."""
+        if not hasattr(self, 'command'):
+            return 0
+        elif self.command.ndim == 1:
+            return 1
         else:
-            time_range = str(self.time)
-            command_str = str(self.command)
+            assert self.command.ndim == 2
+            return self.command.shape[0]
 
-        output_ls = [
-            'Stim object\n\nLabel: ', self.label, '\nStim type: ',
-            self.stim_type, '\nTime range (ms): ', time_range,
-            '\nTime step (ms):', str(self.dt), '\nStim Parameters',
-            vars(self.stim_params), '\nCommand:\n', command_str
-        ]
+    @property
+    def no_timesteps(self):
+        """Number of stimulus timesteps."""
+        if not hasattr(self, 'command'):
+            return 0
+        elif self.command.ndim == 1:
+            return len(self.command)
+        else:
+            assert self.command.ndim == 2
+            return self.command.shape[1]
 
-        return ''.join(output_ls)
-
-    # Pretty print self.command and some important details.
-    # (Called by print().)
-    def __str__(self):
-        """Return str(self)."""
-        # Include more details about the object if it isn't empty.
-        if self.command is not None:
-
-            header = '{} Stim object with {} sweeps of {}s each.\n\n'.format(
-                self.stim_type,
-                self.command.shape[1],
-                (self.time[-1] + self.dt) * self.dt / 1000
+    @property
+    def duration(self):
+        """Duration of stimulus in ms."""
+        if not hasattr(self, 'dt'):
+            raise AttributeError(
+                '`duration` not defined for un-generated stimulus.'
             )
+        return self.no_timesteps * self.dt
 
-            content = np.array2string(self.command)
+    def replicate(self, replicates):
+        """Replicate stimulus for `replicates` sweeps.
 
-            footer_ls = ['Stim parameters are: ']
-
-            for key, value in vars(self.stim_params).items():
-                keyval_str = '\n\t{}: {}'.format(key, value)
-                footer_ls.append(keyval_str)
-
-            footer_ls.append('\n\n')
-            footer = ''.join(footer_ls)
-
-        else:
-
-            header = '{} Stim object.'.format(self.stim_type)
-            content = ''
-            footer = ''
-
-        output_ls = [str(self.label), '\n\n', header, footer, content]
-
-        return ''.join(output_ls)
-
-    # MAIN METHODS
-
-    # Generate a synaptic current-like waveform with defined amplitude
-
-    def generate_PS(self, duration, ampli, tau_rise, tau_decay):
-        """Generate a post-synaptic potential/current-like waveform.
-
-        Note that the rise and decay time constants are only good
-        approximations of fitted rise/decay taus (which are more experimentally
-        relevant) if the provided values are separated by at least approx. half
-        an order of magnitude.
-
-        Inputs:
-            duration          -- length of the simulated waveform in ms ^ -1.
-            ampli             -- peak height of the waveform.
-            tau_rise          -- time constant of the rising phase of the waveform in ms ^ -1.
-            tau_decay         -- time constant of the falling phase of the waveform in ms ^ -1.
+        `replicates=2` results in a two sweep stimulus. `replicates=1` does
+        nothing.
         """
-        # Initialize time support vector.
-        offset = 500
-        self.time = np.arange(0, duration, self.dt)
+        if replicates <= 1:
+            raise ValueError('Replicates must be int >1.')
+        self.command = np.tile(self.command, (replicates, 1))
 
-        # Generate waveform based on time constants then normalize amplitude.
-        waveform = np.exp(-self.time / tau_decay) - \
-            np.exp(-self.time / tau_rise)
-        waveform /= np.max(waveform)
-        waveform *= ampli
+    def copy(self):
+        """Return deep copy of stimulus instance."""
+        return deepcopy(self)
 
-        # Convert waveform into a column vector.
-        waveform = np.concatenate(
-            (np.zeros((int(offset / self.dt))), waveform), axis=0
-        )
-        waveform = waveform[np.newaxis].T
+    def simulate_response(self, R, C, E, plot=True, verbose=True):
+        """Simulate response of passive membrane to stimulus.
 
-        # Compute total charge transfer using the equation AUC = ampli *
-        # (tau_decay - tau_rise). (Derived from integrating PS equation from 0
-        # to inf)
-        charge = ampli * (tau_decay - tau_rise)
-
-        # Assign output.
-        self.time = np.arange(0, duration + offset, self.dt)
-        self.command = waveform
-        self.stim_type = "Post-synaptic current-like"
-        self.stim_params = types.SimpleNamespace(
-            tau_rise=tau_rise, tau_decay=tau_decay,
-            ampli=ampli, charge=charge
-        )
-
-    # Generate a synaptic current-like waveform with defined area under curve
-    # (total charge transfer)
-    def generate_PS_bycharge(self, duration, charge, tau_rise, tau_decay):
-        """Generate a post-synaptic potential/current-like waveform.
-
-        Note that the rise and decay time constants are only good approximations
-        of fitted rise/decay taus (which are more experimentally relevant) if
-        the provided values are separated by at least approx. half an order of
-        magnitude.
-
-        Inputs:
-            duration          -- length of the simulated waveform in ms ^ -1.
-            charge            -- total charge transfer in units of pA*ms
-            tau_rise          -- time constant of the rising phase of the waveform in ms ^ -1.
-            tau_decay         -- time constant of the falling phase of the waveform in ms ^ -1.
-        """
-        # Initialize time support vector.
-        offset = 500
-        self.time = np.arange(0, duration, self.dt)
-
-        # Generate waveform based on time constants
-        waveform = np.exp(-self.time / tau_decay) - \
-            np.exp(-self.time / tau_rise)
-
-        # Calculate ratio between desired and current charge and use to
-        # normalize waveform
-        curr_charge = tau_decay - tau_rise
-        scalefactor_waveform = charge / curr_charge
-        waveform *= scalefactor_waveform
-
-        # Convert waveform into a column vector.
-        waveform = np.concatenate(
-            (np.zeros((int(offset / self.dt))), waveform), axis=0
-        )
-        waveform = waveform[np.newaxis].T
-
-        # Compute amplitude of PS based on charge sign
-        if charge > 0:
-            ampli = np.max(waveform)
-        else:
-            ampli = np.min(waveform)
-
-        # Assign output.
-        self.time = np.arange(0, duration + offset, self.dt)
-        self.command = waveform
-        self.stim_type = "Post-synaptic current-like"
-        self.stim_params = types.SimpleNamespace(
-            tau_rise=tau_rise, tau_decay=tau_decay,
-            ampli=ampli, charge=charge
-        )
-
-    # Realize OU noise and assign to self.command. (Wrapper for
-    # _gen_OU_internal.)
-    def generate_OU(self, duration, I0, tau, sigma0, dsigma, sin_per):
-        """Realize Ornstein-Uhlenbeck noise.
-
-        Parameters are provided to allow the noise SD to vary sinusoidally over
-        time.
-
-        sigma[t] = sigma0 * ( 1 + dsigma * sin(2pi * sin_freq)[t] )
-
-        Inputs:
-            duration        -- duration of noise to realize in ms.
-            I0              -- mean value of the noise.
-            tau             -- noise time constant in ms ^ -1.
-            sigma0          -- mean SD of the noise.
-            dsigma          -- fractional permutation of noise SD.
-            sin_per         -- period of the sinusoidal SD permutation in ms.
-        """
-        # Initialize support vectors.
-        self.time = np.arange(0, duration, self.dt)
-        self.command = np.zeros(self.time.shape)
-        S = sigma0 * (1 + dsigma * np.sin((2 * np.pi / sin_per) * self.time))
-        rands = np.random.standard_normal(len(self.time))
-
-        # Perform type conversions for vectors.
-        self.time.dtype = np.float64
-        self.command.dtype = np.float64
-        S.dtype = np.float64
-        rands.dtype = np.float64
-
-        # Perform type conversions for constants.
-        self.dt = np.float64(self.dt)
-        I0 = np.float64(I0)
-        tau = np.float64(tau)
-
-        # Realize noise using nb.jit-accelerated function.
-        noise = self._gen_OU_internal(
-            self.time, rands, self.dt, I0,
-            tau, S
-        )
-
-        # Convert noise to a column vector.
-        noise = noise[np.newaxis].T
-
-        # Assign output.
-        self.command = noise
-        self.stim_type = 'Ornstein-Uhlenbeck noise'
-        self.stim_params = types.SimpleNamespace(
-            I0=I0, tau=tau, sigma0=sigma0,
-            dsigma=dsigma, sin_per=sin_per
-        )
-
-    # Generate sinusoidal input
-    def generate_sin(self, duration, I0, ampli, period):
-        """Generate a sine wave with time-dependent amplitude and/or period.
-
-        Inputs:
-            duration        -- duration of the wave in ms.
-            I0              -- offset of the wave.
-            ampli           -- amplitude of the wave.
-            period          -- period of the wave in ms.
-
-        Amplitude and/or period can be time-varied by passing one-dimensional
-        vectors of length duration/dt instead of constants.
-        """
-        # Initialize time support vector.
-        self.time = np.arange(0, duration, self.dt)
-
-        # Convert ampli to a vector if need be;
-        # otherwise check that it's the right shape.
-        try:
-            tmp = iter(ampli)
-            del tmp  # Verify that ampli is iterable.
-            assert len(ampli) == len(self.time)
-
-        except TypeError:
-            ampli = np.array([ampli] * len(self.time))
-
-        except AssertionError:
-            raise ValueError('len of ampli must correspond to duration.')
-
-        # Do the same with period.
-        try:
-            tmp = iter(period)  # Verify that period is iterable.
-            del tmp
-            assert len(period) == len(self.time)
-
-        except TypeError:
-            period = np.array([period] * len(self.time))
-
-        except AssertionError:
-            raise ValueError('len of period must correspond to duration.')
-
-        # Calculate the sine wave over time.
-        sinewave = I0 + ampli * np.sin((2 * np.pi / period) * self.time)
-
-        # Convert sine wave to column vector.
-        sinewave = sinewave[np.newaxis].T
-
-        # Assign output.
-        self.command = sinewave
-        self.stim_type = 'Sine wave'
-        self.stim_params = types.SimpleNamespace(
-            I0=I0, ampli=ampli, period=period
-        )
-
-    @staticmethod
-    @nb.jit(nb.float64[:, :](nb.float64[:, :], nb.float64,
-                             nb.float64, nb.float64, nb.float64))
-    def _internal_V_integrator(input_, R, C, E, dt):
-
-        V = np.empty_like(input_)
-
-        for i in range(input_.shape[1]):
-
-            V[0, i] = E
-
-            for t in range(1, input_.shape[0]):
-
-                dV = ((-(V[t - 1, i] - E) / R + input_[t, i])) * dt / C
-                V[t, i] = V[t - 1, i] + dV
-
-        return V
-
-    # Simulate response of RC circuit.
-    def simulate_RC(self, R, C, E, plot=True, verbose=True):
-        """Simulate response of RC circuit to command.
+        Model the neuronal membrane as an RC circuit.
 
         Inputs
         ------
             R: float
-            --  Resistance of RC circuit in MOhm
+            --  Membrane resistance in MOhm.
             C: float
-            --  Capacitance of RC circuit in pF
+            -- Membrane capacitance in pF.
             E: float
-            --  Equilibrium potential/reversal poential/resting potential of the
-                cell in mV
+            --  Membrane resting potential in mV.
             plot: bool (default True)
-            --  Plot the integrated stimulation
+            --  Plot the simulated voltage response.
             verbose: bool (default True)
-            --  Print some helpful output. Set to False to run quietly.
+            --  Print information about progress.
+
+        Returns
+        -------
+            [sweeps, time] array with simulated voltage response.
 
         """
-        input_ = self.command.copy() * 1e-12  # Convert pA to A
-        dt_ = self.dt * 1e-3
-        R *= 1e6  # Convert R from MOhm to Ohm
-        C *= 1e-12  # Convert C to F from pF
-        E *= 1e-3  # Convert E from mV to V
-        if verbose:
-            print('tau = {}ms'.format(R * C * 1e3))
+        # Check that command to export actually exists.
+        if not (hasattr(self, 'command') and hasattr(self, 'time_supp')):
+            raise AttributeError('`Stimulus<type>.command` must be initialized '
+                                 'by calling `Stimulus<type>.generate()` '
+                                 'before it can be integrated.')
 
-        if verbose:
-            print('Integrating voltage...')
-        V = self._internal_V_integrator(input_, R, C, E, dt_)
-        V *= 1e3
-        if verbose:
-            print('Done integrating voltage!')
+        # Data type to use for simulations.
+        # Needed for numba.jit accelerated current integrator.
+        dtype = np.float64
 
+        # Put command into 2D array if it isn't already.
+        if self.command.ndim == 1:
+            input_ = self.command.copy()[np.newaxis, :].astype(dtype)
+        else:
+            input_ = self.command.copy().astype(dtype)
+
+        # Unit conversions.
+        input_ *= 1e-3
+        leak_conductance = 1/R
+        C *= 1e-3
+        if verbose:
+            print('tau = {}ms'.format(R * C))
+
+        # Run current integrator.
+        if verbose:
+            print('Integrating input...')
+        output_ = np.empty_like(input_)  # Buffer for integrated voltage.
+        V = self._integrate(
+            input_, output_,
+            dtype(leak_conductance), dtype(C), dtype(E), dtype(self.dt)
+        )
+        #V *= 1e3
+        if verbose:
+            print('Done!')
+
+        # Plot integrated voltage.
         if plot:
             if verbose:
                 print('Plotting...')
             plt.figure()
 
-            t_vec = np.arange(0, int(input_.shape[0] * self.dt), self.dt)
-
             ax = plt.subplot(211)
-            plt.plot(t_vec, V, 'k-')
+            plt.plot(self.time_supp, V.T, 'k-')
             plt.ylabel('Voltage (mV)')
             plt.xlabel('Time (ms)')
 
             plt.subplot(212, sharex=ax)
-            plt.plot(t_vec, input_ * 1e12, 'k-')
+            plt.plot(self.time_supp, self.command.T, 'k-')
             plt.ylabel('Command (pA)')
             plt.xlabel('Time (ms)')
 
@@ -432,128 +162,514 @@ class Stim(object):
 
         return V
 
-    # Set number of replicates of the command array.
-    def set_replicates(self, reps):
-        """Set number of replicates of the existing command array."""
-        # Check that command has been initialized.
-        try:
-            assert self.command is not None
-        except AssertionError:
-            raise RuntimeError('No command array to replicate!')
+    def plot(self, ax=None, **pltargs):
+        """Show generated stimulus."""
+        # Check that command to plot actually exists.
+        if not (hasattr(self, 'command') and hasattr(self, 'time_supp')):
+            raise AttributeError('`Stimulus<type>.command` must be initialized '
+                                 'by calling `Stimulus<type>.generate()` '
+                                 'before it can be plotted.')
 
-        # Create replicates by tiling.
-        self.command = np.tile(self.command, (1, reps))
-        self.stim_params.array_replicates = reps
+        # Get default mpl axes.
+        if ax is None:
+            ax = plt.gca()
 
-    # Plot command, time, and additional data.
-    def plot(self, **data):
-        """Plot command (and any additional data) over time.
+        # Make plot.
+        ax.plot(self.time_supp, self.command.T, **pltargs)
+        ax.set_xlabel('Time (ms)')
+        ax.set_ylabel('Command')
 
-        Produces a plot of self.command over self.time as its primary output.
+        return ax
 
-        Additional data of interest may be plotted as supplementary plots by
-        passing them to the function as named arguments each containing a
-        numerical vector of the same length as self.command.
+    def export(self, fname):
+        """Export generated stimulus in Axon Text Format."""
+        # Check that command to export actually exists.
+        if not (hasattr(self, 'command') and hasattr(self, 'time_supp')):
+            raise AttributeError('`Stimulus<type>.command` must be initialized '
+                                 'by calling `Stimulus<type>.generate()` '
+                                 'before it can be exported.')
 
-        """
-        d_keys = data.keys()
-        l_dk = len(d_keys)
+        # Coerce command and time support to column vectors, if applicable.
+        arrs_to_export = {}
+        for attr in ['command', 'time_supp']:
+            if getattr(self, attr).ndim == 1:
+                arrs_to_export[attr] = getattr(self, attr)[:, np.newaxis]
+            else:
+                arrs_to_export[attr] = getattr(self, attr).T
+        # Join into a single array to write to file.
+        arr_to_export = np.concatenate(
+            [arrs_to_export['time_supp'], arrs_to_export['command']],
+            axis=1
+        )
+        del arrs_to_export
 
-        plt.figure(figsize=(9, 3 + 3 * l_dk))
-        plt.suptitle(str(self.label))
+        with open(fname, 'w', newline='') as f:
+            # Write header.
+            f.write(
+                'ATF1.0\n1\t{}\nType=1\nTime (ms)\t{}\n'.format(
+                    arr_to_export.shape[1] - 1,
+                    'Command (AU)\t' * (arr_to_export.shape[1] - 1)
+                )
+            )
 
-        # Plot generated noise over time.
-        plt.subplot(1 + l_dk, 1, 1)
-        plt.title('Generated stimulus')
-        plt.xlabel('Time (ms)')
-        plt.ylabel('Command')
+            # Write input.
+            stimwriter = csv.writer(f, delimiter='\t')
+            stimwriter.writerows(arr_to_export)
 
-        plt.plot(self.time, self.command, '-k', linewidth=0.5)
-
-        # Add plots from data passed as named arguments.
-        i = 2
-        for key in d_keys:
-
-            plt.subplot(1 + l_dk, 1, i)
-            plt.title(key)
-            plt.xlabel('Time (ms)')
-
-            plt.plot(self.time, data[key], '-k', linewidth=0.5)
-
-            i += 1
-
-        # Final formatting and show plot.
-        plt.tight_layout(rect=(0, 0, 1, 0.95))
-        plt.show()
-
-    # Write command and time to an ATF file.
-    def write_ATF(self, fname=None):
-        """Write command and time to an ATF file."""
-        # Check whether there is any data to write.
-        try:
-            assert self.command is not None
-            assert self.time is not None
-        except AssertionError:
-            raise RuntimeError('Command and time must both exist!')
-
-        if fname is None:
-            fname = self.label + '.ATF'
-        elif fname[-4:].upper() != '.ATF':
-            fname = fname + '.ATF'
-
-        header_ls = [
-            'ATF1.0\n1\t{}\nType=1\nTime (ms)\t'.format(self.command.shape[1]),
-            *['Command (AU)\t' for sweep in range(self.command.shape[1])],
-            '\n'
-        ]
-        header = ''.join(header_ls)
-
-        # Convert numeric arrays to strings.
-        str_command = self.command.astype(np.unicode_)
-        str_time = self.time.astype(np.unicode_)
-
-        # Initialize list to hold arrays.
-        content_ls = []
-
-        # Tab-delimit data one row (i.e., time step) at a time.
-        for t in range(len(str_time)):
-
-            tmp = str_time[t] + '\t' + '\t'.join(str_command[t, :])
-            content_ls.append(tmp)
-
-        # Turn the content list into one long string.
-        content = '\n'.join(content_ls)
-
-        # Write the header and content strings to the file.
-        with open(fname, 'w') as f:
-
-            f.write(header)
-            f.write(content)
+            # Close file.
             f.close()
 
-    # HIDDEN METHODS
+    # Accelerated methods.
 
-    # Fast internal method to realize OU noise. (Called by generate_OU.)
+    @staticmethod
+    @nb.jit(nb.float64[:, :](nb.float64[:, :], nb.float64[:, :], nb.float64,
+                             nb.float64, nb.float64, nb.float64), nopython=True)
+    def _integrate(input_, output_, leak_conductance, C, E, dt):
+        """Integrate `input_` with a passive membrane filter.
+
+        `output_` is a buffer to hold output voltage. Accelerated using
+        `numba.jit`.
+
+        """
+        for i in range(input_.shape[0]):
+            output_[0, i] = E
+            for t in range(1, input_.shape[1]):
+                dV = (
+                    -leak_conductance * (output_[i, t-1] - E) + input_[i, t-1]
+                ) * dt / C
+                output_[i, t] = output_[i, t-1] + dV
+
+        return output_
+
+
+# DEFINE STIMULUS SUBCLASSES
+
+class SynapticStimulus(BaseStimulus):
+    """Biexponential synaptic stimulus."""
+
+    def __init__(
+        self, amplitude, tau_rise, tau_decay,
+        start_time=None, duration=None, dt=0.1,
+        label=None
+    ):
+        """Initialize SynapticStimulus."""
+        self.label = label
+
+        # Store stimulus parameters.
+        self.amplitude = amplitude
+        self.tau_rise = tau_rise
+        self.tau_decay = tau_decay
+
+        # Generate stimulus if optional time params are given.
+        if all([x is not None for x in [start_time, duration, dt]]):
+            self.generate(start_time, duration, dt)
+
+    def __repr__(self):
+        """Return repr(self)."""
+        reprstr = (
+            'ez.stimtools.SynapticStimulus('
+            'amplitude={amplitude}, '
+            'tau_rise={tau_rise}, '
+            'tau_decay={tau_decay}, '
+            'label={label}'
+            ')'.format(
+                amplitude=self.amplitude, tau_rise=self.tau_rise,
+                tau_decay=self.tau_decay, label=self.label
+            )
+        )
+        return reprstr
+
+    def generate(self, start_time, duration, dt):
+        """Generate SynapticStimulus vector."""
+        self.time_supp = np.arange(0, duration - 0.5 * dt, dt)
+
+        # Generate waveform based on time constants then normalize amplitude.
+        waveform = (
+            np.exp(-self.time_supp / self.tau_decay)
+            - np.exp(-self.time_supp / self.tau_rise)
+        )
+        waveform /= np.max(waveform)
+        waveform *= self.amplitude
+
+        # Pad with zeros for convolution.
+        waveform = waveform[:(len(self.time_supp) // 2)]
+        waveform = np.concatenate(
+            [np.zeros(len(waveform) + len(self.time_supp) % 2), waveform]
+        )
+        assert len(waveform) == len(self.time_supp)
+
+        # Convolve waveform with indicator vector for onset times.
+        indicator = np.zeros_like(self.time_supp)
+        indicator[int(start_time/dt)] = 1
+        convolved = np.convolve(waveform, indicator, mode='same')
+
+        # Assign attributes.
+        self.command = convolved
+        self.start_time = start_time
+        self.dt = dt
+
+
+class OUStimulus(BaseStimulus):
+    """Ornstein-Uhlenbeck noise stimulus."""
+
+    def __init__(
+        self, mean, amplitude, tau, ampli_modulation, mod_period,
+        seed=None, duration=None, dt=0.1,
+        label=None
+    ):
+        """Initialize OUStimulus."""
+        self.label = label
+
+        # Store stimulus parameters.
+        self.mean = mean
+        self.amplitude = amplitude
+        self.tau = tau
+        self.ampli_modulation = ampli_modulation
+        self.mod_period = mod_period
+        self.seed = seed
+
+        # Generate stimulus if optional time params are given.
+        if all([x is not None for x in [duration, dt]]):
+            self.generate(duration, dt)
+
+    def __repr__(self):
+        """Return repr(self)."""
+        reprstr = (
+            'ez.stimtools.OUStimulus('
+            'mean={mean}, '
+            'amplitude={amplitude}, '
+            'tau={tau}, '
+            'ampli_modulation={ampli_modulation}, '
+            'mod_period={mod_period}, '
+            'seed={seed}, '
+            'label={label}'
+            ')'.format(
+                mean=self.mean,
+                amplitude=self.amplitude,
+                tau=self.tau,
+                ampli_modulation=self.ampli_modulation,
+                mod_period=self.mod_period,
+                seed=self.seed,
+                label=self.label
+            )
+        )
+        return reprstr
+
+    def generate(self, duration, dt):
+        """Generate OUStimulus vector."""
+        dtype = np.float64  # Datatype to use for realizing noise.
+        self.time_supp = np.arange(0, duration - 0.5 * dt, dt)
+
+        # Precompute sinusoidal amplitude modulation.
+        ampli = self.amplitude * (
+            1 + self.ampli_modulation * np.sin(
+                (2 * np.pi / self.mod_period) * self.time_supp
+            )
+        )
+        # Sample noise.
+        np.random.seed(self.seed)
+        rands = np.random.standard_normal(len(self.time_supp))
+
+        # Leakily integrate random walk to get Ornstein-Uhlenbeck noise.
+        output_ = np.empty_like(self.time_supp).astype(dtype)
+        noise = self._integrate_walk(
+            output_.astype(dtype), rands.astype(dtype), ampli.astype(dtype),
+            dtype(self.mean), dtype(self.tau), dtype(dt)
+        )
+
+        # Assign attributes.
+        self.command = noise
+        self.dt = dt
+
     @staticmethod
     @nb.jit(
         nb.float64[:](
-            nb.float64[:], nb.float64[:], nb.float64,
-            nb.float64, nb.float64, nb.float64[:]
+            nb.float64[:], nb.float64[:], nb.float64[:],
+            nb.float64, nb.float64, nb.float64
         ),
         nopython=True
     )
-    def _gen_OU_internal(T, rands, dt, I0, tau, sigma):
+    def _integrate_walk(output_, rands, amplitude, mean, tau, dt):
+        """Leakily integrate random walk."""
+        output_[0] = mean
+        for t in range(1, len(output_)):
+            adaptive_term = mean - output_[t-1]
+            random_term = (
+                np.sqrt(2 * amplitude[t-1]**2 * dt / tau)
+                * rands[t-1]
+            )
+            doutput_ = adaptive_term * dt / tau + random_term
+            output_[t] = output_[t-1] + doutput_
 
-        I = np.zeros(T.shape, dtype=np.float64)
-        I[0] = I0
+        return output_
 
-        for t in range(1, len(T)):
 
-            adaptive_term = (I0 - I[t - 1])
-            random_term = np.sqrt(2 * sigma[t]**2 * dt / tau) * rands[t]
+class SinStimulus(BaseStimulus):
+    """Sinusoidal stimulus."""
 
-            dV = adaptive_term * dt / tau + random_term
+    def __init__(
+        self, mean, amplitude, frequency,
+        duration=None, dt=0.1,
+        label=None
+    ):
+        """Initialize SinStimulus."""
+        self.label = label
 
-            I[t] = I[t - 1] + dV
+        # Store stimulus parameters.
+        self.mean = mean
+        self.amplitude = amplitude
+        self.frequency = frequency
 
-        return I
+        # Generate stimulus if optional time params are given.
+        if all([x is not None for x in [duration, dt]]):
+            self.generate(duration, dt)
+
+    def __repr__(self):
+        """Return repr(self)."""
+        reprstr = (
+            'ez.stimtools.SinStimulus('
+            'mean={mean}, '
+            'amplitude={amplitude}, '
+            'frequency={frequency}, '
+            'label={label}'
+            ')'.format(
+                mean=self.mean,
+                amplitude=self.amplitude,
+                frequency=self.frequency,
+                label=self.label
+            )
+        )
+        return reprstr
+
+    def generate(self, duration, dt):
+        """Generate SinStimulus vector."""
+        self.time_supp = np.arange(0, duration - 0.5 * dt, dt)
+
+        # Generate sine wave.
+        wave = self.mean + self.amplitude * np.sin(
+            2 * np.pi * self.frequency * 1e-3 * self.time_supp  # Convert to Hz
+        )
+
+        # Assign attributes.
+        self.command = wave
+        self.dt = dt
+
+
+class ChirpStimulus(BaseStimulus):
+    """Sine wave stimulus of exponentially changing frequency."""
+
+    def __init__(
+        self, mean, amplitude, initial_frequency, final_frequency,
+        duration=None, dt=0.1,
+        label=None
+    ):
+        """Initialize ChirpStimulus."""
+        # Input checks.
+        if np.isclose(initial_frequency, final_frequency):
+            warnings.warn(
+                '`initial_frequency` and `final_frequency` should '
+                'not be identical. Change one of these values or use '
+                '`ez.stimtools.SinStimulus` instead.'
+            )
+
+        self.label = label
+
+        # Store stimulus parameters.
+        self.mean = mean
+        self.amplitude = amplitude
+        self.initial_frequency = initial_frequency
+        self.final_frequency = final_frequency
+
+        # Generate stimulus if optional time params are given.
+        if all([x is not None for x in [duration, dt]]):
+            self.generate(duration, dt)
+
+    def __repr__(self):
+        """Return repr(self)."""
+        reprstr = (
+            'ez.stimtools.ChirpStimulus('
+            'mean={mean}, '
+            'amplitude={amplitude}, '
+            'initial_frequency={initial_frequency}, '
+            'final_frequency={final_frequency}, '
+            'label={label}'
+            ')'.format(
+                mean=self.mean,
+                amplitude=self.amplitude,
+                initial_frequency=self.initial_frequency,
+                final_frequency=self.final_frequency,
+                label=self.label
+            )
+        )
+        return reprstr
+
+    def generate(self, duration, dt):
+        """Generate ChirpStimulus vector."""
+        self.time_supp = np.arange(0, duration - 0.5 * dt, dt)
+
+        # Generate sine wave.
+        freq = np.logspace(
+            np.log10(self.initial_frequency),
+            np.log10(self.final_frequency),
+            endpoint=True,
+            num=len(self.time_supp),
+            base=10,
+        )
+        wave = self.mean + self.amplitude * np.sin(
+            2 * np.pi * freq * 1e-3 * self.time_supp  # Convert freq to Hz.
+        )
+
+        # Assign attributes.
+        self.command = wave
+        self.dt = dt
+
+
+# COMPOUND STIMULI
+
+class CompoundStimulus(BaseStimulus):
+
+    def __init__(self, stimulus=None, dt=0.1, label=None):
+        self.label = label
+        self.dt = dt
+
+        if stimulus is None:
+            self.recipe = ''
+            pass
+        elif issubclass(type(stimulus), BaseStimulus):
+            if isinstance(stimulus, CompoundStimulus):
+                self.recipe = stimulus.recipe
+            else:
+                self.recipe = repr(stimulus)
+
+            # If stimulus is a single Stimulus object, just copy attributes.
+            self.command = stimulus.command
+            self.time_supp = stimulus.time_supp
+            if stimulus.dt != dt:
+                warnings.warn(
+                    'stimulus.dt = {} not equal to argument dt = {}; using '
+                    '{} from stimulus.'.format(stimulus.dt, dt)
+                )
+            self.dt = stimulus.dt
+        else:
+            self.recipe = 'array_like'
+
+            # Assume stimulus is array_like.
+            self.command = np.asarray(stimulus)
+            self.time_supp = np.arange(
+                0,
+                self.duration - 0.5 * self.dt,
+                self.dt
+            )
+            assert len(self.time_supp) == self.no_timesteps
+
+    def __str__(self):
+        """Return recipe."""
+        return self.recipe
+
+    def __add__(self, x):
+        """Add CompoundStimulus and x."""
+        # Method to add two Stimulus objects together.
+        if issubclass(type(x), BaseStimulus):
+            # Check that command arrays have compatible shapes.
+            if not (hasattr(self, 'command') and hasattr(x, 'command')):
+                raise AttributeError('`command` must be initialized by '
+                                     'calling `generate` before Stimulus '
+                                     'objects can be added.')
+            if self.no_timesteps != x.no_timesteps:
+                raise ValueError('`command` arrays must have same number of '
+                                 'time steps.')
+
+            # Check that time attributes match.
+            for attr_ in ['duration', 'dt']:
+                if not np.isclose(getattr(self, attr_), getattr(x, attr_)):
+                    raise ValueError(
+                        'Stimulus {} must be equal.'.format(attr_)
+                    )
+
+            # Get recipe for x.
+            if isinstance(x, CompoundStimulus):
+                x_recipe = x.recipe
+            else:
+                x_recipe = repr(x)
+
+            # Add command arrays.
+            newcommand = self.command + x.command
+
+        # Method to add Stimulus to array_like object.
+        else:
+            x_recipe = 'array_like'
+            newcommand = self.command + np.asarray(x)
+
+        newstimulus = CompoundStimulus()
+        newstimulus.recipe = '\n+ '.join([self.recipe, x_recipe])
+        newstimulus.command = newcommand
+        newstimulus.time_supp = self.time_supp
+        newstimulus.dt = self.dt
+
+        return newstimulus
+
+
+def concatenate(stimuli, dt='auto'):
+    """Join Stimulus objects together end to end."""
+    # Infer dt.
+    dts = [
+        stimulus.dt for stimulus in stimuli
+        if issubclass(type(stimulus), BaseStimulus)
+    ]
+    if len(dts) == 0:
+        if dt == 'auto':
+            raise ValueError(
+                'stimuli must contain at least one Stimulus object or '
+                'dt must be specified.'
+            )
+        else:
+            pass
+    elif dt == 'auto' and not all([dt_ == dts[0] for dt_ in dts]):
+        raise ValueError('stimulus.dt is not equal for all stimuli.')
+    elif dt != 'auto' and not all([dt_ == dt for dt_ in dts]):
+        raise ValueError(
+            'stimulus.dt is not equal to argument dt for all stimuli.'
+        )
+    else:
+        # Successful auto dt.
+        dt = dts[0]
+        del dts
+
+    # Concatenate stimuli together.
+    ingredients = []  # List to hold recipe of each stimulus in stimuli.
+    if isinstance(stimuli[0], CompoundStimulus):  # Initialize result.
+        result = stimuli[0].copy()
+    else:
+        result = CompoundStimulus(deepcopy(stimuli[0]), dt=dt)
+    # Concatenate each additional stimulus onto result.
+    for stimulus in stimuli[1:]:
+        # Convert stimulus to CompoundStimulus if necessary.
+        if not isinstance(stimulus, CompoundStimulus):
+            stimulus = CompoundStimulus(stimulus, dt=dt)
+
+        # Concatenate command arrays.
+        if result.command.ndim == 1:
+            result.command = np.concatenate(
+                [result.command, stimulus.command]
+            )
+        else:
+            assert result.command.ndim == 2
+            result.command = np.concatenate(
+                [result.command,
+                 np.broadcast_to(stimulus.command, result.command.shape)]
+            )
+
+        # Store recipe ingredient.
+        ingredients.append(stimulus.recipe)
+
+    # Update duration and support vector.
+    result.time_supp = np.arange(
+        0, result.duration - result.dt * 0.5, result.dt
+    )
+
+    # Store result recipe.
+    result.recipe = '\n'.join(
+        ['concatenate(', '\t' + ',\n\t'.join(ingredients), ')']
+    )
+
+    return result
