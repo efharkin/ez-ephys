@@ -132,7 +132,8 @@ class TestCompoundStimulus(unittest.TestCase):
             npt.assert_array_almost_equal(
                 tmp_compound.command,
                 initial_command + const_offset,
-                err_msg='Constant add to CompoundStimulus incorrect.'
+                err_msg='Add constant to `CompoundStimulus` not '
+                'equivalent to adding to command.'
             )
 
         variable_offset = np.array([3, 3, 2, 1])
@@ -140,14 +141,48 @@ class TestCompoundStimulus(unittest.TestCase):
         npt.assert_array_almost_equal(
             tmp_compound.command,
             initial_command + variable_offset,
-            err_msg='Vector add to CompoundStimulus incorrect.'
+            err_msg='Add vector to `CompoundStimulus` not '
+            'equivalent to adding to command.'
         )
 
         tmp_compound = compound + st.CompoundStimulus(variable_offset, dt=dt)
         npt.assert_array_almost_equal(
             tmp_compound.command,
             initial_command + variable_offset,
-            err_msg='Adding CompoundStimulus objects not equivalent to adding commands.'
+            err_msg='Adding `CompoundStimulus` objects not equivalent to '
+            'adding commands.'
+        )
+
+    def test_subtract(self):
+        """Test `stimtools.CompoundStimulus.__sub__` behaviour."""
+        dt = 1
+        initial_command = np.array([1, 2, 3, 2])
+        compound = st.CompoundStimulus(initial_command, dt=dt)
+
+        for const_offset in np.linspace(-10, 10, 7):
+            tmp_compound = compound - const_offset
+            npt.assert_array_almost_equal(
+                tmp_compound.command,
+                initial_command - const_offset,
+                err_msg='Subtract constant from `CompoundStimulus` not '
+                'equivalent to subtraction from command.'
+            )
+
+        variable_offset = np.array([3, 3, 2, 1])
+        tmp_compound = compound - variable_offset
+        npt.assert_array_almost_equal(
+            tmp_compound.command,
+            initial_command - variable_offset,
+            err_msg='Subtract vector from `CompoundStimulus` not '
+            'equivalent to subtraction from command.'
+        )
+
+        tmp_compound = compound - st.CompoundStimulus(variable_offset, dt=dt)
+        npt.assert_array_almost_equal(
+            tmp_compound.command,
+            initial_command - variable_offset,
+            err_msg='Adding `CompoundStimulus` objs not equivalent to adding '
+            'commands.'
         )
 
 

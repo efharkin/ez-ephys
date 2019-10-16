@@ -30,11 +30,18 @@ class BaseStimulus(object):
         pass
 
     def __add__(self, x):
-        """Add two Stimulus objects."""
+        """Add x to Stimulus object."""
         # Adding is implemented for CompoundStimulus objects,
         # so coerce self to a CompoundStimulus and add.
         tmpstimulus = CompoundStimulus(self)
         return tmpstimulus + x
+
+    def __sub__(self, x):
+        """Subtract x from Stimulus object."""
+        # Subtraction is implemented for CompoundStimulus objects,
+        # so coerce self to a CompoundStimulus and subtract.
+        tmpstimulus = CompoundStimulus(self)
+        return tmpstimulus - x
 
     @property
     def no_sweeps(self):
@@ -527,6 +534,7 @@ class ChirpStimulus(BaseStimulus):
 # COMPOUND STIMULI
 
 class CompoundStimulus(BaseStimulus):
+    """Stimulus constructed from sub-stimuli."""
 
     def __init__(self, stimulus=None, dt=0.1, label=None):
         self.label = label
@@ -602,6 +610,48 @@ class CompoundStimulus(BaseStimulus):
 
         newstimulus = CompoundStimulus()
         newstimulus.recipe = '\n+ '.join([self.recipe, x_recipe])
+        newstimulus.command = newcommand
+        newstimulus.time_supp = self.time_supp
+        newstimulus.dt = self.dt
+
+        return newstimulus
+
+    def __sub__(self, x):
+        """Subtract x from CompoundStimulus."""
+        # Method to add two Stimulus objects together.
+        if issubclass(type(x), BaseStimulus):
+            # Check that command arrays have compatible shapes.
+            if not (hasattr(self, 'command') and hasattr(x, 'command')):
+                raise AttributeError('`command` must be initialized by '
+                                     'calling `generate` before Stimulus '
+                                     'objects can be subtracted.')
+            if self.no_timesteps != x.no_timesteps:
+                raise ValueError('`command` arrays must have same number of '
+                                 'time steps.')
+
+            # Check that time attributes match.
+            for attr_ in ['duration', 'dt']:
+                if not np.isclose(getattr(self, attr_), getattr(x, attr_)):
+                    raise ValueError(
+                        'Stimulus {} must be equal.'.format(attr_)
+                    )
+
+            # Get recipe for x.
+            if isinstance(x, CompoundStimulus):
+                x_recipe = x.recipe
+            else:
+                x_recipe = repr(x)
+
+            # Add command arrays.
+            newcommand = self.command - x.command
+
+        # Method to add Stimulus to array_like object.
+        else:
+            x_recipe = 'array_like'
+            newcommand = self.command - np.asarray(x)
+
+        newstimulus = CompoundStimulus()
+        newstimulus.recipe = '\n- '.join([self.recipe, x_recipe])
         newstimulus.command = newcommand
         newstimulus.time_supp = self.time_supp
         newstimulus.dt = self.dt
