@@ -3,12 +3,6 @@
 @author: Emerson
 
 """
-
-__all__ = [
-    'BaseStimulus', 'SynapticStimulus', 'OUStimulus', 'SinStimulus',
-    'ChirpStimulus', 'CompoundStimulus', 'concatenate'
-]
-
 # IMPORT MODULES
 
 import csv
@@ -20,15 +14,19 @@ import numba as nb
 import matplotlib.pyplot as plt
 
 
-# DEFINE SIMULUS PARENT CLASS
+# SIMULUS BASE CLASS
 
 class BaseStimulus(object):
     """Base class for stimulus objects."""
 
+    # Methods that must be implemented by derived classes. (Pure virtual.)
     def __init__(self):
-        """Initialize BaseStimulus (does nothing)."""
-        pass
+        """Initialize Stimulus (implemented by derived classes)."""
+        raise NotImplementedError(
+            'Initialization must be implemented by derived stimulus classes.'
+        )
 
+    # Methods that should not be changed by derived classes.
     def __add__(self, x):
         """Add x to Stimulus object."""
         # Adding is implemented for CompoundStimulus objects,
@@ -129,7 +127,7 @@ class BaseStimulus(object):
 
         # Unit conversions.
         input_ *= 1e-3
-        leak_conductance = 1/R
+        leak_conductance = 1 / R
         C *= 1e-3
         if verbose:
             print('tau = {}ms'.format(R * C))
@@ -242,39 +240,169 @@ class BaseStimulus(object):
             output_[0, i] = E
             for t in range(1, input_.shape[1]):
                 dV = (
-                    -leak_conductance * (output_[i, t-1] - E) + input_[i, t-1]
+                    -leak_conductance * (output_[i, t - 1] - E) + input_[i, t - 1]
                 ) * dt / C
-                output_[i, t] = output_[i, t-1] + dV
+                output_[i, t] = output_[i, t - 1] + dV
 
         return output_
 
 
-# DEFINE STIMULUS SUBCLASSES
+# ARBITRARY ARRAY STIMULUS
 
-class SynapticStimulus(BaseStimulus):
-    """Biexponential synaptic stimulus."""
+class ArrayStimulus(BaseStimulus):
+    """Stimulus constructed from an arbitrary array."""
+
+    def __init__(self, command, dt=0.1, label=None):
+        """Initialize ArrayStimulus."""
+        self.label = label
+
+        if issubclass(type(command), BaseStimulus):
+            self.command = command.command
+        elif issubclass(type(command), StimulusKernel):
+            self.command = command.kernel
+        else:
+            self.command = np.asarray(command)
+
+        self.dt = dt
+        self.time_supp = np.arange(
+            0, (self.no_timesteps - 0.5) * self.dt, self.dt
+        )
+
+    def __str__(self):
+        """Return string representation of ArrayStimulus."""
+        return "ArrayStimulus of size {:.1f}ms x {} sweeps".format(
+            self.duration, self.no_sweeps
+        )
+
+
+class ConvolvedStimulus(BaseStimulus):
+    """Stimulus defined by a kernel convolved with a basis."""
+
+    # Methods that must be implemented by derived classes.
+    def __init__(
+        self, loc, kernel, basis=None, dt=0.1, kernel_max_len=None, label=None
+    ):
+        """Initialize CompoundStimulus."""
+        self.label = label
+
+        self.loc = loc
+        self.kernel = kernel
+        self.basis = basis
+
+        if basis is not None:
+            self.generate(basis, dt, kernel_max_len)
+
+    # Methods that should not be reimplemented by derived classes.
+    def generate(self, basis, dt, kernel_max_len=None):
+        """Generate stimulus vector.."""
+        self.basis = ArrayStimulus(basis, dt)
+        self.time_supp = np.arange(0, self.basis.duration - 0.5 * dt, dt)
+
+        # Compute length of kernel to generate.
+        if kernel_max_len is None:
+            kernel_duration = self.basis.duration
+        else:
+            kernel_duration = min(kernel_max_len * dt, self.basis.duration)
+
+        # Generate kernel.
+        self.kernel.generate(
+            duration=kernel_duration, dt=dt, front_padded=False
+        )
+
+        # Run discrete convolution.
+        output = np.zeros_like(self.basis.command, dtype=np.float64)
+        output = self._sparse_convolve(
+            self.kernel.kernel.astype(np.float64),
+            np.atleast_2d(self.basis.command).astype(np.float64),
+            np.atleast_2d(output)
+        )
+        output += self.loc  # Add offset.
+
+        self.command = output
+
+    @staticmethod
+    @nb.jit(
+        nb.float64[:, :](nb.float64[:], nb.float64[:, :], nb.float64[:, :]),
+        nopython=True
+    )
+    def _sparse_convolve(kernel, basis, output):
+        """Discrete convolution of kernel and basis vector.
+
+        Arguments
+        ---------
+        kernel : list-like
+            Non-sparse stimulus kernel.
+        basis : array-like
+            Sparse array with which kernel is convolved.
+        output : array-like
+            Pre-allocated array to hold output.
+
+        Returns
+        -------
+        output : array-like
+            Array containing the convolved stimulus. Same shape as basis.
+
+        """
+        for i in range(basis.shape[0]):
+            for j in range(basis.shape[1]):
+                if basis[i, j] == 0.:
+                    continue
+                else:
+                    end_ind = min(len(kernel), output.shape[1] - j)
+                    output[i, j:j + end_ind] += basis[i, j] * kernel[:end_ind]
+        return output
+
+
+class StimulusKernel(object):
+
+    def __init__(self):
+        raise NotImplementedError
+
+    def generate(self):
+        raise NotImplementedError
+
+    def plot(self, ax=None, **pltargs):
+        # Check that kernel to plot actually exists.
+        if not (hasattr(self, 'kernel') and hasattr(self, 'time_supp')):
+            raise AttributeError('`<type>Kernel.kernel` must be initialized '
+                                 'by calling `<type>Kernel.generate()` '
+                                 'before it can be plotted.')
+
+        # Get default mpl axes.
+        if ax is None:
+            ax = plt.gca()
+
+        # Make plot.
+        ax.plot(self.time_supp, self.kernel, **pltargs)
+        ax.set_xlabel('Time (ms)')
+        ax.set_ylabel('Amplitude')
+
+        return ax
+
+
+class BiexponentialSynapticKernel(StimulusKernel):
+    """Synaptic kernel with exponential rise and decay."""
 
     def __init__(
         self, amplitude, tau_rise, tau_decay,
-        start_time=None, duration=None, dt=0.1,
-        label=None
+        duration=None, dt=0.1, front_padded=False, label=None
     ):
-        """Initialize SynapticStimulus."""
+        """Initialize BiexponentialSynapticKernel."""
         self.label = label
 
-        # Store stimulus parameters.
+        # Store kernel parameters.
         self.amplitude = amplitude
         self.tau_rise = tau_rise
         self.tau_decay = tau_decay
 
-        # Generate stimulus if optional time params are given.
-        if all([x is not None for x in [start_time, duration, dt]]):
-            self.generate(start_time, duration, dt)
+        # Generate kernel if optional time params are given.
+        if all([x is not None for x in [duration, dt]]):
+            self.generate(duration, dt, front_padded)
 
     def __repr__(self):
         """Return repr(self)."""
         reprstr = (
-            'ez.stimtools.SynapticStimulus('
+            'ez.stimtools.BiexponentialSynapticKernel('
             'amplitude={amplitude}, '
             'tau_rise={tau_rise}, '
             'tau_decay={tau_decay}, '
@@ -286,11 +414,10 @@ class SynapticStimulus(BaseStimulus):
         )
         return reprstr
 
-    def generate(self, start_time, duration, dt):
-        """Generate SynapticStimulus vector."""
+    def generate(self, duration, dt, front_padded=False):
+        """Generate BiexponentialSynapticKernel vector."""
         self.time_supp = np.arange(0, duration - 0.5 * dt, dt)
 
-        # Generate waveform based on time constants then normalize amplitude.
         waveform = (
             np.exp(-self.time_supp / self.tau_decay)
             - np.exp(-self.time_supp / self.tau_rise)
@@ -298,25 +425,54 @@ class SynapticStimulus(BaseStimulus):
         waveform /= np.max(waveform)
         waveform *= self.amplitude
 
-        # Pad with zeros for convolution.
-        waveform = waveform[:(len(self.time_supp) // 2)]
-        waveform = np.concatenate(
-            [np.zeros(len(waveform) + len(self.time_supp) % 2), waveform]
-        )
-        assert len(waveform) == len(self.time_supp)
+        if front_padded:
+            # Pad with zeros to center kernel.
+            waveform = waveform[:(len(self.time_supp) // 2)]
+            waveform = np.concatenate(
+                [np.zeros(len(waveform) + len(self.time_supp) % 2), waveform]
+            )
 
-        # Convolve waveform with indicator vector for onset times.
-        indicator = np.zeros_like(self.time_supp)
-        indicator[int(start_time/dt)] = 1
-        convolved = np.convolve(waveform, indicator, mode='same')
-
-        # Assign attributes.
-        self.command = convolved
-        self.start_time = start_time
+        self.kernel = waveform
         self.dt = dt
 
+        return waveform
 
-class OUStimulus(BaseStimulus):
+
+# SIMPLE STIMULI
+
+class SimpleStimulus(BaseStimulus):
+    """Interface template for simple stimuli."""
+
+    def __init__(self, loc, ampli, reqd_args, duration, dt, label=None):
+        """Initialize SimpleStimulus.
+
+        Must be implemented by derived classes.
+
+        Suggested implementation
+        ------------------------
+        1. Store loc, ampli, and stimulus-specific positional arguments in
+           attributes.
+        2. If duration and dt are not None, call generate method.
+
+        """
+        raise NotImplementedError(
+            'Initialization must be implemented by derived stimulus classes.'
+        )
+
+    def generate(self, duration, dt=0.1):
+        """Generate stimulus vector.
+
+        Required call signature
+        -----------------------
+        SimpleStimulus.generate(duration, dt=0.1)
+
+        """
+        raise NotImplementedError(
+            '`generate` must be implemented by derived stimulus classes.'
+        )
+
+
+class OUStimulus(SimpleStimulus):
     """Ornstein-Uhlenbeck noise stimulus."""
 
     def __init__(
@@ -400,18 +556,18 @@ class OUStimulus(BaseStimulus):
         """Leakily integrate random walk."""
         output_[0] = mean
         for t in range(1, len(output_)):
-            adaptive_term = mean - output_[t-1]
+            adaptive_term = mean - output_[t - 1]
             random_term = (
-                np.sqrt(2 * amplitude[t-1]**2 * dt / tau)
-                * rands[t-1]
+                np.sqrt(2 * amplitude[t - 1]**2 * dt / tau)
+                * rands[t - 1]
             )
             doutput_ = adaptive_term * dt / tau + random_term
-            output_[t] = output_[t-1] + doutput_
+            output_[t] = output_[t - 1] + doutput_
 
         return output_
 
 
-class SinStimulus(BaseStimulus):
+class SinStimulus(SimpleStimulus):
     """Sinusoidal stimulus."""
 
     def __init__(
@@ -462,7 +618,7 @@ class SinStimulus(BaseStimulus):
         self.dt = dt
 
 
-class ChirpStimulus(BaseStimulus):
+class ChirpStimulus(SimpleStimulus):
     """Sine wave stimulus of exponentially changing frequency."""
 
     def __init__(
