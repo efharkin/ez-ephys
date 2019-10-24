@@ -18,5 +18,5 @@ setuptools.setup(
     keywords='neuroscience,electrophysiology',
     packages=['ezephys'],
     install_requires=[
-        'matplotlib>=3.1.1', 'numpy>=1.17.2', 'neo>=0.7.2', 'numba>=0.45.1']
+        'matplotlib', 'numpy', 'neo', 'numba']
 )
