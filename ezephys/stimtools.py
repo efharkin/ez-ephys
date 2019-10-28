@@ -265,7 +265,7 @@ class ArrayStimulus(BaseStimulus):
 
         self.dt = dt
         self.time_supp = np.arange(
-            0, (self.no_timesteps - 0.5) * self.dt, self.dt
+            0, self.duration - 0.5 * self.dt, self.dt
         )
 
     def __str__(self):
@@ -358,6 +358,18 @@ class StimulusKernel(object):
     def __init__(self):
         raise NotImplementedError
 
+    @property
+    def no_timesteps(self):
+        """Number of kernel timesteps."""
+        if not hasattr(self, 'kernel'):
+            return 0
+        elif self.kernel.ndim == 1:
+            return len(self.kernel)
+        else:
+            raise NotImplementedError(
+                '`no_timesteps` not implemented for non-vector kernel.'
+            )
+
     def generate(self):
         raise NotImplementedError
 
@@ -380,20 +392,52 @@ class StimulusKernel(object):
         return ax
 
 
+class ArrayKernel(StimulusKernel):
+    """Stimulus kernel constructed from an arbitrary array."""
+
+    def __init__(self, kernel, dt=0.1, label=None):
+        """Initialize ArrayKernel."""
+        self.label = label
+
+        if issubclass(type(kernel), BaseStimulus):
+            self.kernel = kernel.command
+        elif issubclass(type(kernel), StimulusKernel):
+            self.kernel = kernel.kernel
+        else:
+            self.kernel = np.asarray(kernel)
+
+        self.dt = dt
+        self.duration = self.no_timesteps * self.dt
+        self.time_supp = np.arange(
+            0, self.duration - 0.5 * self.dt, self.dt
+        )
+
+    def __str__(self):
+        """Return string representation of ArrayStimulus."""
+        return "ArrayStimulus of size {:.1f}ms x {} sweeps".format(
+            self.duration, self.no_sweeps
+        )
+
+    def generate(self, duration, dt, front_padded=False):
+        """Return the ArrayKernel. Arguments are for compatibility only."""
+        return self.kernel
+
+
 class BiexponentialSynapticKernel(StimulusKernel):
     """Synaptic kernel with exponential rise and decay."""
 
     def __init__(
-        self, amplitude, tau_rise, tau_decay,
+        self, size, tau_rise, tau_decay, size_method='amplitude',
         duration=None, dt=0.1, front_padded=False, label=None
     ):
         """Initialize BiexponentialSynapticKernel."""
         self.label = label
 
         # Store kernel parameters.
-        self.amplitude = amplitude
+        self.size = size
         self.tau_rise = tau_rise
         self.tau_decay = tau_decay
+        self.size_method = size_method
 
         # Generate kernel if optional time params are given.
         if all([x is not None for x in [duration, dt]]):
@@ -403,13 +447,15 @@ class BiexponentialSynapticKernel(StimulusKernel):
         """Return repr(self)."""
         reprstr = (
             'ez.stimtools.BiexponentialSynapticKernel('
-            'amplitude={amplitude}, '
+            'size={size}, '
             'tau_rise={tau_rise}, '
             'tau_decay={tau_decay}, '
+            'size_method={size_method}, '
             'label={label}'
             ')'.format(
-                amplitude=self.amplitude, tau_rise=self.tau_rise,
-                tau_decay=self.tau_decay, label=self.label
+                size=self.size, tau_rise=self.tau_rise,
+                tau_decay=self.tau_decay, size_method=self.size_method,
+                label=self.label
             )
         )
         return reprstr
@@ -422,8 +468,82 @@ class BiexponentialSynapticKernel(StimulusKernel):
             np.exp(-self.time_supp / self.tau_decay)
             - np.exp(-self.time_supp / self.tau_rise)
         )
-        waveform /= np.max(waveform)
-        waveform *= self.amplitude
+        if self.size_method == 'amplitude':
+            waveform /= np.max(waveform)
+            waveform *= self.size
+        elif self.size_method.upper() == 'AUC':
+            waveform *= self.size / (self.tau_decay - self.tau_rise)
+        else:
+            raise ValueError(
+                'Expected `size_method` to be `amplitude` or `AUC`, got {} '
+                'instead.'.format(self.size_method)
+            )
+
+        if front_padded:
+            # Pad with zeros to center kernel.
+            waveform = waveform[:(len(self.time_supp) // 2)]
+            waveform = np.concatenate(
+                [np.zeros(len(waveform) + len(self.time_supp) % 2), waveform]
+            )
+
+        self.kernel = waveform
+        self.dt = dt
+
+        return waveform
+
+
+class MonoexponentialSynapticKernel(StimulusKernel):
+    """Synaptic kernel with exponential decay."""
+
+    def __init__(
+        self, size, tau_decay, size_method='amplitude',
+        duration=None, dt=0.1, front_padded=False, label=None
+    ):
+        """Initialize BiexponentialSynapticKernel."""
+        self.label = label
+
+        # Store kernel parameters.
+        self.size = size
+        self.tau_decay = tau_decay
+        self.size_method = size_method
+
+        # Generate kernel if optional time params are given.
+        if all([x is not None for x in [duration, dt]]):
+            self.generate(duration, dt, front_padded)
+
+    def __repr__(self):
+        """Return repr(self)."""
+        reprstr = (
+            'ez.stimtools.MonoexponentialSynapticKernel('
+            'size={size}, '
+            'tau_decay={tau_decay}, '
+            'size_method={size_method}, '
+            'label={label}'
+            ')'.format(
+                size=self.size, tau_rise=self.tau_rise,
+                size_method=self.size_method,
+                label=self.label
+            )
+        )
+        return reprstr
+
+    def generate(self, duration, dt, front_padded=False):
+        """Generate MonoexponentialSynapticKernel vector."""
+        self.time_supp = np.arange(0, duration - 0.5 * dt, dt)
+
+        waveform = (
+            np.exp(-self.time_supp / self.tau_decay)
+        )
+        if self.size_method == 'amplitude':
+            waveform /= np.max(waveform)
+            waveform *= self.size
+        elif self.size_method.upper() == 'AUC':
+            waveform *= self.size / self.tau_decay
+        else:
+            raise ValueError(
+                'Expected `size_method` to be `amplitude` or `AUC`, got {} '
+                'instead.'.format(self.size_method)
+            )
 
         if front_padded:
             # Pad with zeros to center kernel.
