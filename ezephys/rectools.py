@@ -137,21 +137,30 @@ class Recording(np.ndarray):
         fit_test_pulse
     """
 
-    def __new__(cls, input_array):
+    def __new__(cls, input_array, dt=0.1):
         """Instantiate new Recording given an array of data.
 
         Allows new Recording objects to be created using np.array-type syntax;
         i.e., by passing Recording a nested list or existing np.array.
         """
+        if np.ndim(input_array) != 3:
+            raise ValueError(
+                'Expected `input_array` ndim == 3, got {} instead. '
+                'Dimensionality must be `[channel, time, sweep]`.'.format(
+                    np.ndim(input_array)
+                )
+            )
+
         # Convert input_array to a np.ndarray, and subsequently to a Recording.
         obj = np.asarray(input_array).view(cls)
-
-        # Check that newly-created recording has correct ndim.
-        if obj.ndim != 3:
-            raise ValueError('Recording dimensionality must be '
-                             '[channel, time, sweep].')
+        obj.dt = dt
 
         return obj
+
+    def __array_finalize__(self, obj):
+        if obj is None:
+            return None
+        self.dt = getattr(obj, 'dt', None)
 
     def set_dt(self, dt):
         """Set Recording timestep width.

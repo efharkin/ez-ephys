@@ -1,12 +1,53 @@
-# IMPORT MODULES
+"""Unit tests for `rectools`."""
 
-import os
+import unittest
 
-import matplotlib.pyplot as plt
-
-from ezephys.rectools import Cell
+import ezephys.rectools as rt
 
 
+class TestRecording(unittest.TestCase):
+    """Tests for `rectools.Recording`."""
+
+    def test_type_preservation(self):
+        """Test that `Recording` objects are returned from various ops on `Recording` objects."""
+        test_rec = rt.Recording([[[0, 1, 2]]])
+        self.assertTrue(
+            isinstance(test_rec, rt.Recording),
+            'Result of `Recording` constructor is not of `Recording` type.'
+        )
+        self.assertTrue(
+            isinstance(test_rec[..., 1:], rt.Recording),
+            'Result of slicing `Recording` is not of `Recording` type.'
+        )
+        self.assertTrue(
+            isinstance(test_rec[..., 1], rt.Recording),
+            'Result of retrieving single element of `Recording` is not of '
+            '`Recording` type.'
+        )
+
+    def test_dt_preservation(self):
+        """Test that `dt` is preserved after indexing `Recording`."""
+        dt = 0.6767335
+        test_rec = rt.Recording([[[0, 1, 2]]], dt=dt)
+        self.assertEqual(
+            test_rec.dt, dt,
+            'Assigned `dt` not equal to attribute `dt`; test code probably '
+            'broken.'
+        )
+        self.assertEqual(
+            test_rec[..., 1:].dt, dt,
+            '`Recording.dt` attribute altered by slicing.'
+        )
+        self.assertEqual(
+            test_rec[..., 1].dt, dt,
+            '`dt` attribute altered by retrieving single element of `Recording`.'
+        )
+
+
+if __name__ == '__main__':
+    unittest.main()
+
+"""
 # LOAD TEST RECORDING
 
 # Load all ABF files in the example data directory
@@ -40,3 +81,4 @@ plt.title('t_mat test')
 plt.plot(test_rec.t_mat[0, :, :], test_rec[0, :, :], 'k-', alpha=0.5)
 plt.xlabel('Time (ms)')
 plt.show()
+"""
