@@ -7,6 +7,15 @@ import numpy.testing as npt
 
 from ezephys import stimtools as st
 
+class TestStepStimulus(unittest.TestCase):
+    """Unit tests for `stimtools.StepStimulus` stimulus class."""
+
+    def test_construction(self):
+        stepstim = st.StepStimulus([0.25, 0.75], [-1., 1.], dt=0.1)
+        npt.assert_array_equal(
+            stepstim.command,
+            [-1., -1., 1., 1., 1., 1., 1., 1., 1.]
+        )
 
 class TestCompoundStimulus(unittest.TestCase):
     """Unit tests for `stimtools.CompoundStimulus` stimulus class."""

@@ -807,6 +807,51 @@ class ChirpStimulus(SimpleStimulus):
         self.dt = dt
 
 
+# STEP SIMULUS
+class StepStimulus(BaseStimulus):
+    """Stimulus consisting of square steps."""
+    def __init__(self, durations, amplitudes, dt=0.1, label=None):
+        if len(durations) != len(amplitudes):
+            raise ValueError(
+                'Expected lengths of durations and amplitudes to be equal; '
+                'got {} and {} instead.'.format(
+                    len(durations), len(amplitudes)
+                )
+            )
+
+        self.dt = dt
+        self.durations = durations
+        self.amplitudes = amplitudes
+
+        self.label = label
+
+        self._generate()
+
+    def __repr__(self):
+        """Return repr(self)."""
+        reprstr = (
+            'ez.stimtools.StepStimulus('
+            'durations={durations}, '
+            'amplitudes={amplitudes}, '
+            'dt={dt}, '
+            'label={label}, '
+            ')'.format(
+                durations=self.durations,
+                amplitudes=self.amplitudes,
+                dt=self.dt,
+                label=self.label,
+            )
+        )
+
+    def _generate(self):
+        command_tmp = []
+        for dur, ampli in zip(self.durations, self.amplitudes):
+            command_tmp.append(ampli * np.ones(int(dur / self.dt)))
+        self.command = np.concatenate(command_tmp, axis=-1)
+        self.time_supp = np.arange(0, self.duration - 0.5 * self.dt, self.dt)
+
+
+
 # COMPOUND STIMULI
 
 class CompoundStimulus(BaseStimulus):
