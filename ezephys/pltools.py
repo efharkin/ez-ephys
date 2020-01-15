@@ -2,6 +2,7 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 
 # DEFINE HANDY TOOLS
 
@@ -151,30 +152,16 @@ def add_scalebar(x_units=None, y_units=None, anchor=(0.98, 0.02),
         ax.axis('off')
 
 
-def hide_ticks(ax=None):
-    """Remove x and y ticks from axes object.
+def hide_border(sides='a', trim=False, ax=None):
+    """Remove and/or trim axes borders.
 
     Arguments
     ---------
-        ax: matplotlib.axes or None
-        --  Defaults to the current axes if set to `None`.
-    """
-    if ax is None:
-        ax = plt.gca()
-
-    ax.set_xticks([])
-    ax.set_yticks([])
-
-
-def hide_border(sides='a', ax=None):
-    """Remove specified borders from axes object.
-
-    Arguments
-    ---------
-        sides: str
-        --  Set to `a` for all sides, or one of `rltb` for right, left, etc.
-        ax: matplotlib.axes or None
-        --  Defaults to the current axes if set to `None`.
+    sides : str `a`, one or more of `rltb`, or `none`
+        Borders to remove.
+    trim : bool, default False
+        Shorten remaining axes to first and last tick. See `seborn.despine`.
+    ax : matplotlib.axes object
 
     """
     # Check for correct input
@@ -189,19 +176,41 @@ def hide_border(sides='a', ax=None):
     if sides == 'a':
         sides = 'rltb'
 
+    # Remove ticks if needed.
+    if 'l' in sides:
+        ax.set_yticks([])
+    if 'b' in sides:
+        ax.set_xticks([])
+
+    # Remove border(s); wraps seaborn.despine().
     sidekeys = {
         'r': 'right',
         'l': 'left',
         't': 'top',
         'b': 'bottom'
     }
-
-    for key, side in sidekeys.iteritems():
-
-        if key not in sides:
-            continue
+    snsdespine_side_args = {}
+    for key in sidekeys:
+        if key in sides:
+            snsdespine_side_args[sidekeys[key]] = True
         else:
-            ax.spines[side].set_visible(False)
+            snsdespine_side_args[sidekeys[key]] = False
+    sns.despine(trim=trim, ax=ax, **snsdespine_side_args)
+
+
+def hide_ticks(ax=None):
+    """Remove x and y ticks from axes object.
+
+    Arguments
+    ---------
+        ax: matplotlib.axes or None
+        --  Defaults to the current axes if set to `None`.
+    """
+    if ax is None:
+        ax = plt.gca()
+
+    ax.set_xticks([])
+    ax.set_yticks([])
 
 
 def p_to_string(p):
