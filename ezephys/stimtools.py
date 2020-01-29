@@ -353,6 +353,8 @@ class ConvolvedStimulus(BaseStimulus):
         return output
 
 
+# KERNELS
+
 class StimulusKernel(object):
 
     def __init__(self):
@@ -557,6 +559,46 @@ class MonoexponentialSynapticKernel(StimulusKernel):
 
         return waveform
 
+# POISSON PROCESS
+class PoissonProcess(object):
+    def __init__(self, rate, dt=0.1, label=None):
+        self.dt = dt
+        self.label = label
+        self.rate = self._coerce_to_stimulus(rate)
+
+    def _coerce_to_stimulus(self, x):
+        if issubclass(type(x), BaseStimulus):
+            if not np.isclose(x.dt, self.dt):
+                raise ValueError(
+                    'Expected instance dt={} and argument dt={} '
+                    'to be equal.'.format(self.dt, x.dt)
+                )
+            else:
+                return x
+        else:
+            return ArrayStimulus(x, self.dt, 'Rate of Poisson process.')
+
+    def sample(self):
+        """Draw a sample from instance inhomogenous Poisson process."""
+        rate_in_mHz = 1e-3 * self.rate.command  # Must convert rate in Hz (s^-1) to mHz (ms^-1)
+        event_probability = 1.0 - np.exp(-rate_in_mHz * self.dt)
+        samples = (
+            np.random.uniform(0.0, 1.0, size=event_probability.shape)
+            < event_probability
+        )
+        return samples.astype(np.int8)
+
+    @property
+    def no_sweeps(self):
+        return self.rate.no_sweeps
+
+    @property
+    def no_timesteps(self):
+        return self.rate.no_timesteps
+
+    @property
+    def duration(self):
+        return self.rate.duration
 
 # SIMPLE STIMULI
 
