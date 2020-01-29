@@ -578,14 +578,40 @@ class PoissonProcess(object):
         else:
             return ArrayStimulus(x, self.dt, 'Rate of Poisson process.')
 
-    def sample(self):
-        """Draw a sample from instance inhomogenous Poisson process."""
+    def sample(self, no_samples='auto'):
+        """Sample from instance inhomogenous Poisson process.
+
+        Arguments
+        ---------
+        no_samples : int
+            Number of samples to draw from Poisson process.
+
+        Returns
+        -------
+        Array with same shape as instance rate containing samples from point
+        process.
+
+        """
         rate_in_mHz = 1e-3 * self.rate.command  # Must convert rate in Hz (s^-1) to mHz (ms^-1)
         event_probability = 1.0 - np.exp(-rate_in_mHz * self.dt)
-        samples = (
-            np.random.uniform(0.0, 1.0, size=event_probability.shape)
-            < event_probability
-        )
+        if no_samples == 'auto':
+            samples = (
+                np.random.uniform(0.0, 1.0, size=event_probability.shape)
+                < event_probability
+            )
+        elif self.no_sweeps == 1:
+            samples = (
+                np.random.uniform(0.0, 1.0, size=(no_samples, len(event_probability)))
+                < event_probability
+            )
+        else:
+            raise ValueError(
+                'Argument `no_samples={}` must be `auto` because '
+                'instance `no_sweeps={}` is not one.'.format(
+                    no_samples,
+                    self.no_sweeps
+                )
+            )
         return samples.astype(np.int8)
 
     @property
