@@ -3,9 +3,9 @@ Created on Tue Jan 30 12:27:39 2018
 
 @author: Emerson
 
-`Cell` class to hold ABF recordings associated with a single neuron, along with
-support `Recording` class to hold recs as a np.array with built-in methods for
-plotting and test-pulse extraction.
+`Recording` class to hold recs as a np.array with built-in methods for plotting
+and test-pulse fitting. Implements a factory function for loading recordings in
+Axon binary format (.abf).
 
 Compatible with python 2 and 3 as of Feb. 5, 2018.
 """
@@ -24,107 +24,64 @@ from neo.io import AxonIO
 
 # DEFINE CELL CLASS
 
-"""
-Defines a class to load and store multiple ABF recordings associated with a
-single neuron.
-"""
+def read_ABF(self, fnames):
+    """Import ABF files into a list of np.arrays.
 
+    Inputs
+    ------
+        fnames  --  list of files to import, or str for a single file
 
-class Cell(object):
+    Returns
+    -------
+        List of np.arrays of recordings with dimensionality [channels,
+        samples, sweeps]
+    """
+    # Convert str to iterable if only one fname is provided.
+    if isinstance(fnames, str):
+        fnames = [fnames]
 
-    # Initialize cell instance.
-    def __init__(self, name=None, **recordings):
-        """Initialize cell."""
-        # Assign predetermined arguments.
-        self.name = name
-        self.rec_names = tuple(recordings.keys())
-        self._rec_dict = recordings
+    # Initialize list to hold output.
+    output = []
 
-        # Read in ABF recordings named in kwargs and place in eponymous attrs.
-        for key in recordings.keys():
+    # Iterate over fnames.
+    for fname in fnames:
 
-            # Initialize list to hold recordings.
-            self.__setattr__(key, self.read_ABF(recordings[key]))
+        # Try reading the file.
+        try:
+            sweeps = AxonIO(fname).read()[0].segments
+        except FileNotFoundError:
+            warn('{} file {} not found. Skipping.'.format(
+                self.name, fname))
+            continue
 
-    # Define repr magic method.
+        # Allocate np.array to hold recording.
+        no_channels = len(sweeps[0].analogsignals)
+        no_samples = len(sweeps[0].analogsignals[0])
+        no_sweeps = len(sweeps)
 
-    def __repr__(self):
-        """Unambiguous representation of cell instance."""
-        if self.name is not None:
-            cellname = 'Cell {}'.format(self.name)
-        else:
-            cellname = 'Unnamed cell'
+        sweeps_arr = Recording(np.empty(
+            (no_channels, no_samples, no_sweeps),
+            dtype=np.float64))
 
-        recnames = '\n'.join(self.rec_names)
+        # Fill the array one sweep at a time.
+        for sweep_ind in range(no_sweeps):
 
-        representation = (
-            cellname
-            + ' with recordings:\n\n'
-            + recnames
-            + '\n\nLocated at {}.'.format(hex(id(self)))
-        )
+            for chan_ind in range(no_channels):
 
-        return representation
+                signal = sweeps[sweep_ind].analogsignals[chan_ind]
+                signal = np.squeeze(signal)
 
-    # Method to read ABF files into a list of np.arrays.
-    # Arrays have dimensionality [channels, samples, sweeps].
-    def read_ABF(self, fnames):
-        """Import ABF files into a list of np.arrays.
+                assert len(signal) == sweeps_arr.shape[1], (
+                    'Not all channels in {} are sampled at the same '
+                    'rate.'.format(fname)
+                )
 
-        Inputs
-        ------
-            fnames  --  list of files to import, or str for a single file
+                sweeps_arr[chan_ind, :, sweep_ind] = signal
 
-        Returns
-        -------
-            List of np.arrays of recordings with dimensionality [channels,
-            samples, sweeps]
-        """
-        # Convert str to iterable if only one fname is provided.
-        if isinstance(fnames, str):
-            fnames = [fnames]
+        # Add recording to output list.
+        output.append(sweeps_arr)
 
-        # Initialize list to hold output.
-        output = []
-
-        # Iterate over fnames.
-        for fname in fnames:
-
-            # Try reading the file.
-            try:
-                sweeps = AxonIO(fname).read()[0].segments
-            except FileNotFoundError:
-                warn('{} file {} not found. Skipping.'.format(
-                    self.name, fname))
-                continue
-
-            # Allocate np.array to hold recording.
-            no_channels = len(sweeps[0].analogsignals)
-            no_samples = len(sweeps[0].analogsignals[0])
-            no_sweeps = len(sweeps)
-
-            sweeps_arr = Recording(np.empty(
-                (no_channels, no_samples, no_sweeps),
-                dtype=np.float64))
-
-            # Fill the array one sweep at a time.
-            for sweep_ind in range(no_sweeps):
-
-                for chan_ind in range(no_channels):
-
-                    signal = sweeps[sweep_ind].analogsignals[chan_ind]
-                    signal = np.squeeze(signal)
-
-                    assert len(signal) == sweeps_arr.shape[1], ('Not all '
-                                                                'channels in {} are sampled at the same '
-                                                                'rate.'.format(fname))
-
-                    sweeps_arr[chan_ind, :, sweep_ind] = signal
-
-            # Add recording to output list.
-            output.append(sweeps_arr)
-
-        return output
+    return output
 
 
 class Recording(np.ndarray):
