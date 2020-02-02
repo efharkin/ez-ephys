@@ -4,7 +4,7 @@ Created on Tue Jan 30 12:27:39 2018
 @author: Emerson
 
 `Recording` class to hold recs as a np.array with built-in methods for plotting
-and test-pulse fitting. Implements a factory function for loading recordings in
+and test-pulse fitting. Implements a factory class `ABFLoader` for loading recordings in
 Axon binary format (.abf).
 
 Compatible with python 2 and 3 as of Feb. 5, 2018.
@@ -22,46 +22,76 @@ import matplotlib.pyplot as plt
 from neo.io import AxonIO
 
 
-# DEFINE CELL CLASS
+# OBJECTS FOR LOADING RECORDINGS
 
-def read_ABF(self, fnames):
-    """Import ABF files into a list of np.arrays.
+class BaseRecordingLoader(object):
+    def __init__(self):
+        raise NotImplementedError
 
-    Inputs
-    ------
-        fnames  --  list of files to import, or str for a single file
+    def load(self, file_names):
+        """Load recordings from files.
 
-    Returns
-    -------
-        List of np.arrays of recordings with dimensionality [channels,
-        samples, sweeps]
-    """
-    # Convert str to iterable if only one fname is provided.
-    if isinstance(fnames, str):
-        fnames = [fnames]
+        Arguments
+        ---------
+        file_names : list or str
+            list of files to import, or str for a single file
 
-    # Initialize list to hold output.
-    output = []
+        Returns
+        -------
+        List of np.array-like recordings each with dimensionality
+        [channels, samples, sweeps].
 
-    # Iterate over fnames.
-    for fname in fnames:
+        """
+        if isinstance(file_names, str):
+            file_names = [file_names]
 
-        # Try reading the file.
-        try:
-            sweeps = AxonIO(fname).read()[0].segments
-        except FileNotFoundError:
-            warn('{} file {} not found. Skipping.'.format(
-                self.name, fname))
-            continue
+        recordings = []
+        for file_name in file_names:
+            recordings.append(self._load_single_file(file_name))
+        return recordings
 
-        # Allocate np.array to hold recording.
+    def _load_single_file(self, file_name):
+        file_data = self._read_data_from_file(file_name)
+        sampling_intervals = self._get_sampling_intervals_in_ms(file_data)
+        assert all(np.isclose(sampling_intervals, sampling_intervals[0]))
+        recording = self._coerce_to_recording(file_data, sampling_intervals[0])
+        return recording
+
+    def _read_data_from_file(self, file_name):
+        raise NotImplementedError
+
+    def _get_sampling_intervals_in_ms(self, file_data):
+        raise NotImplementedError
+
+    def _coerce_to_recording(self, file_data, sampling_interval):
+        raise NotImplementedError
+
+
+class ABFLoader(BaseRecordingLoader):
+    """Load recordings in Axon binary format (.abf)."""
+    def __init__(self):
+        pass
+
+    def _read_data_from_file(self, file_name):
+        return AxonIO(file_name).read()[0].segments
+
+    def _get_sampling_intervals_in_ms(self, file_data):
+        sampling_intervals = []
+        for sweep in file_data:
+            for signal in sweep.analogsignals:
+                sampling_intervals.append(1e3 / signal.sampling_rate.item())
+        return sampling_intervals
+
+    def _coerce_to_recording(self, file_data, sampling_interval):
+        sweeps = file_data
+
         no_channels = len(sweeps[0].analogsignals)
         no_samples = len(sweeps[0].analogsignals[0])
         no_sweeps = len(sweeps)
 
-        sweeps_arr = Recording(np.empty(
-            (no_channels, no_samples, no_sweeps),
-            dtype=np.float64))
+        sweeps_arr = np.empty(
+            (no_channels, no_samples, no_sweeps), dtype=np.float64
+        )
 
         # Fill the array one sweep at a time.
         for sweep_ind in range(no_sweeps):
@@ -78,11 +108,10 @@ def read_ABF(self, fnames):
 
                 sweeps_arr[chan_ind, :, sweep_ind] = signal
 
-        # Add recording to output list.
-        output.append(sweeps_arr)
+        return Recording(sweeps_arr, dt=sampling_interval)
 
-    return output
 
+# PYTHON OBJECT FOR REPRESENTING RECORDINGS
 
 class Recording(np.ndarray):
     """Subclass of np.ndarray with additional methods for common ephys tasks.
