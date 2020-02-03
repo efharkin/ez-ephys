@@ -293,6 +293,8 @@ class ConvolvedStimulus(BaseStimulus):
         if basis is not None:
             self.generate(basis, dt, kernel_max_len)
 
+    #TODO: Implement __repr__
+
     # Methods that should not be reimplemented by derived classes.
     def generate(self, basis, dt, kernel_max_len=None):
         """Generate stimulus vector.."""
@@ -1092,16 +1094,41 @@ def concatenate(stimuli, dt='auto'):
             stimulus = CompoundStimulus(stimulus, dt=dt)
 
         # Concatenate command arrays.
+        #TODO: Extract into a private method.
         if result.command.ndim == 1:
-            result.command = np.concatenate(
-                [result.command, stimulus.command]
-            )
+            if stimulus.command.ndim == 1:
+                result.command = np.concatenate(
+                    [result.command, stimulus.command]
+                )
+            elif stimulus.command.ndim == 2 and stimulus.no_sweeps == 1:
+                result.command = np.concatenate(
+                    [result.command, stimulus.command.flatten()]
+                )
+            elif stimulus.command.ndim > 2 or stimulus.no_sweeps > 1:
+                raise ValueError(
+                    'Dimensionality of stimulus {} does not match other '
+                    'stimuli to concatenate.'.format(stimulus)
+                )
+            else:
+                raise RuntimeError('Unexpectedly reached end of switch.')
+        elif result.command.ndim == 2:
+            if stimulus.command.ndim == 1:
+                result.command = np.concatenate(
+                    [result.command,
+                     np.tile(stimulus.command, (result.command.shape[0], 1))]
+                )
+            elif stimulus.command.ndim == 2 and stimulus.no_sweeps == result.no_sweeps:
+                result.command = np.concatenate(
+                    [result.command, stimulus.command]
+                )
+            else:
+                raise ValueError(
+                    'Dimensionality of stimulus {} does not match other '
+                    'stimuli to concatenate.'.format(stimulus)
+                )
         else:
-            assert result.command.ndim == 2
-            result.command = np.concatenate(
-                [result.command,
-                 np.broadcast_to(stimulus.command, result.command.shape)]
-            )
+            # Cannot get here since command can only be 1D or 2D.
+            raise RuntimeError('Unexpectedly reached end of switch.')
 
         # Store recipe ingredient.
         ingredients.append(stimulus.recipe)
