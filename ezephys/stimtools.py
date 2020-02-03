@@ -713,11 +713,15 @@ class OUStimulus(SimpleStimulus):
         self.time_supp = np.arange(0, duration - 0.5 * dt, dt)
 
         # Precompute sinusoidal amplitude modulation.
-        ampli = self.amplitude * (
-            1 + self.ampli_modulation * np.sin(
-                (2 * np.pi / self.mod_period) * self.time_supp
+        if self.ampli_modulation != 0.:
+            ampli = self.amplitude * (
+                1 + self.ampli_modulation * np.sin(
+                    (2 * np.pi / self.mod_period) * self.time_supp
+                )
             )
-        )
+        else:
+            ampli = self.amplitude * np.ones_like(self.time_supp)
+
         # Sample noise.
         np.random.seed(self.seed)
         rands = np.random.standard_normal(len(self.time_supp))
