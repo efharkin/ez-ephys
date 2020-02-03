@@ -284,6 +284,7 @@ class ConvolvedStimulus(BaseStimulus):
     ):
         """Initialize CompoundStimulus."""
         self.label = label
+        self.dt = dt
 
         self.loc = loc
         self.kernel = kernel
