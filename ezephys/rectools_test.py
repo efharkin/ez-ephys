@@ -56,7 +56,8 @@ PATHS = []
 for fname in os.listdir(EX_DATA_DIR):
     if fname[-4:].lower() == '.abf':
         PATHS.append(os.path.join(EX_DATA_DIR, fname))
-test_rec_ls = Cell().read_ABF(PATHS)
+loader = rt.ABFLoader()
+test_rec_ls = loader.load(PATHS)
 
 # Assign one of the recordings to test_rec and plot it
 test_rec = test_rec_ls[1]
