@@ -1058,6 +1058,7 @@ class CompoundStimulus(BaseStimulus):
 def concatenate(stimuli, dt='auto'):
     """Join Stimulus objects together end to end."""
     # Infer dt.
+    #TODO: extract into private method.
     dts = [
         stimulus.dt for stimulus in stimuli
         if issubclass(type(stimulus), BaseStimulus)
@@ -1087,53 +1088,19 @@ def concatenate(stimuli, dt='auto'):
         result = stimuli[0].copy()
     else:
         result = CompoundStimulus(deepcopy(stimuli[0]), dt=dt)
-    # Concatenate each additional stimulus onto result.
+
+    # Concatenate each additional stimulus onto result
+    # and build recipe from ingredients.
     for stimulus in stimuli[1:]:
-        # Convert stimulus to CompoundStimulus if necessary.
         if not isinstance(stimulus, CompoundStimulus):
             stimulus = CompoundStimulus(stimulus, dt=dt)
-
-        # Concatenate command arrays.
-        #TODO: Extract into a private method.
-        if result.command.ndim == 1:
-            if stimulus.command.ndim == 1:
-                result.command = np.concatenate(
-                    [result.command, stimulus.command]
-                )
-            elif stimulus.command.ndim == 2 and stimulus.no_sweeps == 1:
-                result.command = np.concatenate(
-                    [result.command, stimulus.command.flatten()]
-                )
-            elif stimulus.command.ndim > 2 or stimulus.no_sweeps > 1:
-                raise ValueError(
-                    'Dimensionality of stimulus {} does not match other '
-                    'stimuli to concatenate.'.format(stimulus)
-                )
-            else:
-                raise RuntimeError('Unexpectedly reached end of switch.')
-        elif result.command.ndim == 2:
-            if stimulus.command.ndim == 1:
-                result.command = np.concatenate(
-                    [result.command,
-                     np.tile(stimulus.command, (result.command.shape[0], 1))]
-                )
-            elif stimulus.command.ndim == 2 and stimulus.no_sweeps == result.no_sweeps:
-                result.command = np.concatenate(
-                    [result.command, stimulus.command]
-                )
-            else:
-                raise ValueError(
-                    'Dimensionality of stimulus {} does not match other '
-                    'stimuli to concatenate.'.format(stimulus)
-                )
-        else:
-            # Cannot get here since command can only be 1D or 2D.
-            raise RuntimeError('Unexpectedly reached end of switch.')
-
-        # Store recipe ingredient.
+        result.command = _concatenate_along_columns(
+            result.command,
+            stimulus.command
+        )
         ingredients.append(stimulus.recipe)
 
-    # Update duration and support vector.
+    # Update support vector.
     result.time_supp = np.arange(
         0, result.duration - result.dt * 0.5, result.dt
     )
@@ -1144,3 +1111,55 @@ def concatenate(stimuli, dt='auto'):
     )
 
     return result
+
+
+def _concatenate_along_columns(a, b):
+    """Concatenate along columns, broadcasting if necessary.
+
+    Treat a and b as row vectors or matrices and concatenate along column axis.
+    Raise a ValueError if either a or b has more than two dimensions.
+
+    """
+    # Check whether a and b are both 1D. If so, output should still be 1D.
+    if (np.ndim(a) == 1) and (np.ndim(b) == 1):
+        output_as_1D = True
+    else:
+        output_as_1D = False
+
+    # Concatenation is easier if both a and b have same number of dimensions,
+    # so coerce to matrices first.
+    a = np.atleast_2d(np.copy(a))
+    b = np.atleast_2d(np.copy(b))
+
+    # This function is not valid if a or b is a multidimensional (>2D) array,
+    # so raise a ValueError if wrong input is supplied.
+    if (a.ndim > 2) or (b.ndim > 2):
+        raise ValueError(
+            'Expected arguments to be of dimensionality at most 2, got {} '
+            'and {} instead.'.format(np.ndim(a), np.ndim(b))
+        )
+
+    # Do concatenation.
+    if a.shape[0] == b.shape[0]:
+        # Shapes match: no broadcasting required.
+        result = np.concatenate([a, b], axis=1)
+    elif a.shape[0] == 1:
+        # Broadcast a.
+        result = np.concatenate([np.tile(a, (b.shape[0], 1)), b], axis=1)
+    elif b.shape[0] == 1:
+        # Broadcast b.
+        result = np.concatenate([a, np.tile(b, (a.shape[0], 1))], axis=1)
+    else:
+        # Shapes do not match and cannot broadcast since neither a nor b is a
+        # row vector.
+        raise ValueError(
+            'Matrices cannot be concatenated with incompatible number of '
+            'rows: {} and {}.'.format(a.shape[0], b.shape[0])
+        )
+
+    # Coerce output to vector if both a and b were vectors.
+    if output_as_1D:
+        result = result.flatten()
+
+    return result
+
