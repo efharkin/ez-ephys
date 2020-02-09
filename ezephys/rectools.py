@@ -148,13 +148,6 @@ class Recording(np.ndarray):
             return None
         self.dt = getattr(obj, 'dt', None)
 
-    def set_dt(self, dt):
-        """Set Recording timestep width.
-
-        Used for calculation of timestamps in t_vec/t_mat
-        """
-        self.dt = dt
-
     @property
     def t_vec(self):
         """Support vector of timestamps."""
