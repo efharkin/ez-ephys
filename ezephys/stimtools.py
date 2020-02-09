@@ -17,7 +17,37 @@ import matplotlib.pyplot as plt
 # SIMULUS BASE CLASS
 
 class BaseStimulus(object):
-    """Base class for stimulus objects."""
+    """Abstract base class for stimulus objects.
+
+    Attributes
+    ----------
+    no_sweeps: int
+        Number of sweeps in stimulus.
+    no_timesteps: int
+        Number of timesteps in one stimulus sweep.
+    duration: float
+        Duration of one stimulus sweep in ms.
+    dt: float
+        Timestep of stimulus in ms.
+    label: str
+        Descriptive label.
+
+    Methods
+    -------
+    generate
+        Generate a discrete representation of the stimulus. Useful for
+        visualization and export.
+    replicate(replicates)
+        Add sweeps to the stimulus by replicating a single sweep.
+    copy
+    simulate_response(R, C, E, plot, verbose)
+        Simulate the voltage response of a neuron to the stimulus.
+    plot
+        Create a matplotlib plot to visualize the stimulus.
+    export
+        Export the stimulus for use in ephys experiments.
+
+    """
 
     # Methods that must be implemented by derived classes. (Pure virtual.)
     def __init__(self):
@@ -89,24 +119,27 @@ class BaseStimulus(object):
     def simulate_response(self, R, C, E, plot=True, verbose=True):
         """Simulate response of passive membrane to stimulus.
 
-        Model the neuronal membrane as an RC circuit.
+        Useful to see how a neuron recorded in current clamp would be expected
+        to respond to the stimulus.
+
+        Models the neuronal membrane as an RC circuit.
 
         Inputs
         ------
-            R: float
-            --  Membrane resistance in MOhm.
-            C: float
-            -- Membrane capacitance in pF.
-            E: float
-            --  Membrane resting potential in mV.
-            plot: bool (default True)
-            --  Plot the simulated voltage response.
-            verbose: bool (default True)
-            --  Print information about progress.
+        R: float
+            Membrane resistance in MOhm.
+        C: float
+            Membrane capacitance in pF.
+        E: float
+            Membrane resting potential in mV.
+        plot: bool (default True)
+            Plot the simulated voltage response.
+        verbose: bool (default True)
+            Print information about progress.
 
         Returns
         -------
-            [sweeps, time] array with simulated voltage response.
+        [sweeps, time] array with simulated voltage response.
 
         """
         # Check that command to export actually exists.
@@ -187,7 +220,16 @@ class BaseStimulus(object):
         return ax
 
     def export(self, fname):
-        """Export generated stimulus in Axon Text Format."""
+        """Export generated stimulus in Axon text format.
+
+        Compatible with Axon Instruments software.
+
+        Arguments
+        ---------
+        fname: str
+            Name of file to which stimulus will be written.
+
+        """
         # Check that command to export actually exists.
         if not (hasattr(self, 'command') and hasattr(self, 'time_supp')):
             raise AttributeError('`Stimulus<type>.command` must be initialized '
@@ -250,10 +292,26 @@ class BaseStimulus(object):
 # ARBITRARY ARRAY STIMULUS
 
 class ArrayStimulus(BaseStimulus):
-    """Stimulus constructed from an arbitrary array."""
+    """Stimulus constructed from an arbitrary array.
+
+    See documentation of BaseStimulus for more information about Stimulus
+    objects.
+
+    """
 
     def __init__(self, command, dt=0.1, label=None):
-        """Initialize ArrayStimulus."""
+        """Initialize ArrayStimulus.
+
+        Arguments
+        ---------
+        command: 1D or 2D array
+            Stimulus waveform.
+        dt: float, default 0.1
+            Timestep in ms.
+        label: str
+            Descriprive label for stimulus instance.
+
+        """
         self.label = label
 
         if issubclass(type(command), BaseStimulus):
@@ -276,13 +334,45 @@ class ArrayStimulus(BaseStimulus):
 
 
 class ConvolvedStimulus(BaseStimulus):
-    """Stimulus defined by a kernel convolved with a basis."""
+    """Stimulus defined by a kernel convolved with a basis.
+
+    See documentation of BaseStimulus for more information about Stimulus
+    objects.
+
+    """
 
     # Methods that must be implemented by derived classes.
     def __init__(
         self, loc, kernel, basis=None, dt=0.1, kernel_max_len=None, label=None
     ):
-        """Initialize CompoundStimulus."""
+        """Initialize ConvolvedStimulus.
+
+        Arguments
+        ---------
+        loc: float
+            Constant offset to apply to generated stimulus. Equivalent to
+            adding a constant to the generated stimulus.
+        kernel: StimulusKernel
+            Kernel to convolve with basis. Example: for a train of synaptic-
+            like currents, you could use a BiexponentialSynapticKernel to
+            specify the shape of a unitary synaptic current.
+        basis: 1D array, Stimulus, or StimulusKernel
+            Basis with which to convolve kernel. Stimulus command will have the
+            same shape as `basis`. Example: for a 100 timestep train of
+            synaptic-like currents, this would be a vector of length 100 that
+            is 1.0 when a synaptic-like current begins and 0.0 otherwise.
+            (Note: for generating synaptic trains, consider using
+            PoissonProcess for a simpler interface.)
+        dt: float, default 0.1
+            Timestep of stimulus in ms.
+        kernel_max_len: int or None
+            Length at which to truncate the discrete StimulusKernel before
+            convolution. Use only if you are using a basis with many timesteps
+            and the convolution takes too long to compute.
+        label: str
+            Descriptive label for stimulus instance.
+
+        """
         self.label = label
         self.dt = dt
 
@@ -297,7 +387,41 @@ class ConvolvedStimulus(BaseStimulus):
 
     # Methods that should not be reimplemented by derived classes.
     def generate(self, basis, dt, kernel_max_len=None):
-        """Generate stimulus vector.."""
+        """Generate stimulus vector by convolving basis with attached kernel.
+
+        Uses an efficient algorithm for sparse convolution. For convolution
+        with a sparse signal with a constant offset (e.g., a synaptic train
+        with a baseline offset), it is more efficient to specify the offset
+        using the `loc` parameter at ConvolvedStimulus initialization than to
+        add the offset to `basis`.
+
+        Arguments
+        ---------
+        basis: 1D array, Stimulus, or StimulusKernel
+            Basis with which to convolve kernel. Stimulus command will have the
+            same shape as `basis`. Example: for a 100 timestep train of
+            synaptic-like currents, this would be a vector of length 100 that
+            is 1.0 when a synaptic-like current begins and 0.0 otherwise.
+            (Note: for generating synaptic trains, consider using
+            PoissonProcess for a simpler interface.)
+        dt: float, default 0.1
+            Timestep of the stimulus in ms.
+        kernel_max_len: int or None
+            Length at which to truncate the discrete StimulusKernel before
+            convolution. Use only if you are using a basis with many timesteps
+            and the convolution takes too long to compute.
+
+        Result
+        ------
+        Initializes `command` attribute with result of discrete convolution
+        of `kernel` attribute with `basis`.
+
+        Side-effects
+        ------------
+        Initializes `basis` and `time_supp` attributes. Calls `generate` on
+        attached `kernel`.
+
+        """
         self.basis = ArrayStimulus(basis, dt)
         self.time_supp = np.arange(0, self.basis.duration - 0.5 * dt, dt)
 
@@ -359,6 +483,12 @@ class ConvolvedStimulus(BaseStimulus):
 # KERNELS
 
 class StimulusKernel(object):
+    """Abstract base class of StimulusKernels for use by ConvolvedStimulus.
+
+    Similar to Stimulus objects, but uses a `kernel` rather than `command`
+    attribute to store the vector representation of the object.
+
+    """
 
     def __init__(self):
         raise NotImplementedError
@@ -398,10 +528,27 @@ class StimulusKernel(object):
 
 
 class ArrayKernel(StimulusKernel):
-    """Stimulus kernel constructed from an arbitrary array."""
+    """Stimulus kernel constructed from an arbitrary array.
+
+    Analogous to ArrayStimulus.
+
+    See StimulusKernel documentation for for more information about kernels.
+
+    """
 
     def __init__(self, kernel, dt=0.1, label=None):
-        """Initialize ArrayKernel."""
+        """Initialize ArrayKernel.
+
+        Arguments
+        ---------
+        kernel: 1D array
+            Array to use for kernel.
+        dt: float, default 0.1
+            Timestep of kernel in ms.
+        label: str
+            Descriptive label.
+
+        """
         self.label = label
 
         if issubclass(type(kernel), BaseStimulus):
@@ -424,18 +571,49 @@ class ArrayKernel(StimulusKernel):
         )
 
     def generate(self, duration, dt, front_padded=False):
-        """Return the ArrayKernel. Arguments are for compatibility only."""
+        """Return the ArrayKernel.
+
+        Arguments are only for compatibility with other StimulusKernels and are
+        ignored.
+
+        """
         return self.kernel
 
 
 class BiexponentialSynapticKernel(StimulusKernel):
-    """Synaptic kernel with exponential rise and decay."""
+    """Synaptic kernel with exponential rise and decay.
+
+    See StimulusKernel documentation for more information about kernels.
+
+    """
 
     def __init__(
         self, size, tau_rise, tau_decay, size_method='amplitude',
         duration=None, dt=0.1, front_padded=False, label=None
     ):
-        """Initialize BiexponentialSynapticKernel."""
+        """Initialize BiexponentialSynapticKernel.
+
+        Arguments
+        ---------
+        size: float
+            Size of waveform. Usually amplitude, but see `size_method`.
+        tau_rise, tau_decay: float
+            Time constants of mono-exponential rise and decay of the synaptic-
+            like current in ms.
+        size_method: str, `amplitude` or `AUC`
+            Interpret `size` argument as amplitude or area under the curve
+            (AUC).
+        duration: float
+            Duration of stimulus kernel in ms.
+        dt: float
+            Timestep of kernel in ms.
+        front_padded: bool, default False
+            Zero-pad the front of the kernel so the onset of the synaptic
+            waveform is centered.
+        label: str
+            Descriptive label.
+
+        """
         self.label = label
 
         # Store kernel parameters.
@@ -466,7 +644,28 @@ class BiexponentialSynapticKernel(StimulusKernel):
         return reprstr
 
     def generate(self, duration, dt, front_padded=False):
-        """Generate BiexponentialSynapticKernel vector."""
+        """Generate BiexponentialSynapticKernel vector.
+
+        Arguments
+        ---------
+        duration: float
+            Duration of stimulus kernel in ms.
+        dt: float
+            Timestep of kernel in ms.
+        front_padded: bool, default False
+            Zero-pad the front of the kernel so the onset of the synaptic
+            waveform is centered.
+
+        Result
+        ------
+        Initializes `kernel` attribute with a biexponential synaptic current-
+        like waveform.
+
+        Side-effects
+        ------------
+        Initializes `time_supp` and `dt` attributes.
+
+        """
         self.time_supp = np.arange(0, duration - 0.5 * dt, dt)
 
         waveform = (
@@ -498,13 +697,39 @@ class BiexponentialSynapticKernel(StimulusKernel):
 
 
 class MonoexponentialSynapticKernel(StimulusKernel):
-    """Synaptic kernel with exponential decay."""
+    """Synaptic kernel with exponential decay.
+
+    See StimulusKernel documentation for more information about kernels.
+
+    """
 
     def __init__(
         self, size, tau_decay, size_method='amplitude',
         duration=None, dt=0.1, front_padded=False, label=None
     ):
-        """Initialize BiexponentialSynapticKernel."""
+        """Initialize BiexponentialSynapticKernel.
+
+        Arguments
+        ---------
+        size: float
+            Size of waveform. Usually amplitude, but see `size_method`.
+        tau_decay: float
+            Time constants of mono-exponential decay of the synaptic-like
+            current in ms.
+        size_method: str, `amplitude` or `AUC`
+            Interpret `size` argument as amplitude or area under the curve
+            (AUC).
+        duration: float
+            Duration of stimulus kernel in ms.
+        dt: float
+            Timestep of kernel in ms.
+        front_padded: bool, default False
+            Zero-pad the front of the kernel so the onset of the synaptic
+            waveform is centered.
+        label: str
+            Descriptive label.
+
+        """
         self.label = label
 
         # Store kernel parameters.
@@ -533,7 +758,28 @@ class MonoexponentialSynapticKernel(StimulusKernel):
         return reprstr
 
     def generate(self, duration, dt, front_padded=False):
-        """Generate MonoexponentialSynapticKernel vector."""
+        """Generate MonoexponentialSynapticKernel vector.
+
+        Arguments
+        ---------
+        duration: float
+            Duration of stimulus kernel in ms.
+        dt: float
+            Timestep of kernel in ms.
+        front_padded: bool, default False
+            Zero-pad the front of the kernel so the onset of the synaptic
+            waveform is centered.
+
+        Result
+        ------
+        Initializes `kernel` attribute with an exponential synaptic current-
+        like waveform.
+
+        Side-effects
+        ------------
+        Initializes `time_supp` and `dt` attributes.
+
+        """
         self.time_supp = np.arange(0, duration - 0.5 * dt, dt)
 
         waveform = (
@@ -564,7 +810,20 @@ class MonoexponentialSynapticKernel(StimulusKernel):
 
 # POISSON PROCESS
 class PoissonProcess(object):
+    #TODO: Inherit from some kind of process object?
     def __init__(self, rate, dt=0.1, label=None):
+        """Initialize PoissonProcess.
+
+        Arguments
+        ---------
+        rate: float 1D array or Stimulus
+            Rate of Poisson process in Hz.
+        dt: float, default 0.1
+            Timestep in ms.
+        label: str
+            Descriptive label.
+
+        """
         self.dt = dt
         self.label = label
         self.rate = self._coerce_to_stimulus(rate)
@@ -582,7 +841,7 @@ class PoissonProcess(object):
             return ArrayStimulus(x, self.dt, 'Rate of Poisson process.')
 
     def sample(self, no_samples='auto'):
-        """Sample from instance inhomogenous Poisson process.
+        """Sample from inhomogenous Poisson process.
 
         Arguments
         ---------
@@ -632,7 +891,7 @@ class PoissonProcess(object):
 # SIMPLE STIMULI
 
 class SimpleStimulus(BaseStimulus):
-    """Interface template for simple stimuli."""
+    """Abstract base class for simple stimuli."""
 
     def __init__(self, loc, ampli, reqd_args, duration, dt, label=None):
         """Initialize SimpleStimulus.
@@ -664,14 +923,46 @@ class SimpleStimulus(BaseStimulus):
 
 
 class OUStimulus(SimpleStimulus):
-    """Ornstein-Uhlenbeck noise stimulus."""
+    """Ornstein-Uhlenbeck noise stimulus.
+
+    Ornstein-Uhlenbeck (OU) noise is the limiting case of synaptic noise for
+    an infinitely large population of synapses with instantaneous rise and the
+    same monoexponential decay.
+
+    """
 
     def __init__(
         self, mean, amplitude, tau, ampli_modulation, mod_period,
         seed=None, duration=None, dt=0.1,
         label=None
     ):
-        """Initialize OUStimulus."""
+        """Initialize OUStimulus.
+
+        Arguments
+        ---------
+        mean: float
+            Mean of the generative process. Close to the mean of the generated
+            signal for very long signals.
+        amplitude: float
+            Scale of fluctuations.
+        tau: float
+            Time constant of the OU process.
+        ampli_modulation: float >= 0.0
+            Fractional amplitude modulation. Set to zero for no amplitude
+            modulation.
+        mod_period: float > 0.0
+            Period of amplitude modulation in ms. Can be zero if
+            `ampli_modulation` is also zero.
+        seed: int
+            Seed value for pseudorandom number generator.
+        duration: float
+            Duration of OU noise to realize in ms.
+        dt: float, default 0.1
+            Timestep of signal in ms.
+        label: str
+            Descriptive label.
+
+        """
         self.label = label
 
         # Store stimulus parameters.
@@ -710,7 +1001,25 @@ class OUStimulus(SimpleStimulus):
         return reprstr
 
     def generate(self, duration, dt):
-        """Generate OUStimulus vector."""
+        """Generate OUStimulus vector.
+
+        Arguments
+        ---------
+        duration: float
+            Duration of signal to realize in ms.
+        dt: float
+            Timestep of signal to realize in ms.
+
+        Result
+        ------
+        Initialize `command` attribute with OU noise.
+
+        Side-effects
+        ------------
+        Initialize `time_supp` and `dt` attributes. Re-seed pseudorandom number
+        generator.
+
+        """
         dtype = np.float64  # Datatype to use for realizing noise.
         self.time_supp = np.arange(0, duration - 0.5 * dt, dt)
 
@@ -770,7 +1079,24 @@ class SinStimulus(SimpleStimulus):
         duration=None, dt=0.1,
         label=None
     ):
-        """Initialize SinStimulus."""
+        """Initialize SinStimulus.
+
+        Arguments
+        ---------
+        mean: float
+            Mean of oscillations.
+        amplitude: float
+            Amplitude of oscillations.
+        frequency: float
+            Frequency of oscillations in Hz.
+        duration: float
+            Duration of stimulus in ms.
+        dt: float, default 0.1
+            Timestep of stimulus in ms.
+        label: str
+            Descriptive label.
+
+        """
         self.label = label
 
         # Store stimulus parameters.
@@ -800,7 +1126,24 @@ class SinStimulus(SimpleStimulus):
         return reprstr
 
     def generate(self, duration, dt):
-        """Generate SinStimulus vector."""
+        """Generate SinStimulus vector.
+
+        Arguments
+        ---------
+        duration: float
+            Duration of stimulus in ms.
+        dt: float
+            Timestep of stimulus in ms.
+
+        Result
+        ------
+        Initializes `command` attribute with sinusoidal oscillations.
+
+        Side-effects
+        ------------
+        Initializes `time_supp` and `dt` attributes.
+
+        """
         self.time_supp = np.arange(0, duration - 0.5 * dt, dt)
 
         # Generate sine wave.
@@ -821,7 +1164,24 @@ class ChirpStimulus(SimpleStimulus):
         duration=None, dt=0.1,
         label=None
     ):
-        """Initialize ChirpStimulus."""
+        """Initialize ChirpStimulus.
+
+        Arguments
+        ---------
+        mean: float
+            Mean of oscillations.
+        amplitude: float
+            Amplitude of oscillations.
+        initial_frequency, final_frequency: float > 0.0
+            Initial and final frequencies of oscillations in Hz.
+        duration: float
+            Duration of oscillations in ms.
+        dt: float
+            Timestep of stimulus in ms.
+        label: str
+            Descriptive label.
+
+        """
         # Input checks.
         if np.isclose(initial_frequency, final_frequency):
             warnings.warn(
@@ -862,7 +1222,24 @@ class ChirpStimulus(SimpleStimulus):
         return reprstr
 
     def generate(self, duration, dt):
-        """Generate ChirpStimulus vector."""
+        """Generate ChirpStimulus vector.
+
+        Arguments
+        ---------
+        duration: float
+            Duration of stimulus in ms.
+        dt: float
+            Timestep of stimulus in ms.
+
+        Result
+        ------
+        Initializes `command` attribute with chirp.
+
+        Side-effects
+        ------------
+        Initializes `time_supp` and `dt` attributes.
+
+        """
         self.time_supp = np.arange(0, duration - 0.5 * dt, dt)
 
         # Generate sine wave.
@@ -884,8 +1261,27 @@ class ChirpStimulus(SimpleStimulus):
 
 # STEP SIMULUS
 class StepStimulus(BaseStimulus):
-    """Stimulus consisting of square steps."""
+    """Stimulus consisting of square steps.
+
+    See documentation of BaseStimulus for more information about stimulus
+    objects.
+
+    """
     def __init__(self, durations, amplitudes, dt=0.1, label=None):
+        """Initialize StepStimulus.
+
+        Arguments
+        ---------
+        durations: float 1D array
+            Duration of each step. Must be of same length as `amplitudes`.
+        amplitudes: float 1D array
+            Amplitude of each step. Must be of same length as `durations`.
+        dt: float, default 0.1
+            Timestep of signal.
+        label:
+            Descriptive label.
+
+        """
         if len(durations) != len(amplitudes):
             raise ValueError(
                 'Expected lengths of durations and amplitudes to be equal; '
@@ -930,9 +1326,38 @@ class StepStimulus(BaseStimulus):
 # COMPOUND STIMULI
 
 class CompoundStimulus(BaseStimulus):
-    """Stimulus constructed from sub-stimuli."""
+    """Stimulus constructed from other stimuli.
+
+    Generally the result of adding or concatenating other Stimulus objects.
+    Not intended for direct use.
+
+    See documentation of BaseStimulus for more information about Stimulus
+    objects.
+
+    Attributes
+    ----------
+    recipe: str
+        Recipe for generating CompoundStimulus from its parts. Not necessarily
+        callable.
+    command, time_supp, no_sweeps, no_timesteps, duration, dt, label
+        Same as BaseStimulus.
+
+    """
 
     def __init__(self, stimulus=None, dt=0.1, label=None):
+        """Initialize CompoundStimulus.
+
+        Arguments
+        ---------
+        stimulus: Stimulus or array
+            Stimulus to coerce to a CompoundStimulus. Copies command, recipe,
+            time_supp, and dt if possible.
+        dt: float, default 0.1
+            Timestep of stimulus. Can be overridden by `stimulus`.
+        label: str
+            Descriptive label.
+
+        """
         self.label = label
         self.dt = dt
 
@@ -1056,7 +1481,21 @@ class CompoundStimulus(BaseStimulus):
 
 
 def concatenate(stimuli, dt='auto'):
-    """Join Stimulus objects together end to end."""
+    """Join Stimulus objects and/or arrays together end to end.
+
+    Arguments
+    ---------
+    stimuli: list of Stimulus objects and/or 1D or 2D array-like
+        Stimuli to concatenate.
+    dt: float or `auto`
+        Timestep of stimulus to be returned. Use `auto` to try to infer
+        timestep from arguments.
+
+    Returns
+    -------
+    CompoundStimulus containing stimuli joined end to end.
+
+    """
     # Infer dt.
     #TODO: extract into private method.
     dts = [
