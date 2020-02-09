@@ -15,30 +15,42 @@ def add_scalebar(x_units=None, y_units=None, anchor=(0.98, 0.02),
                  omit_x=False, omit_y=False, round=True, usetex=True, ax=None):
     """Automagically add a set of x and y scalebars to a matplotlib plot.
 
+    By default, scalebars are sized automatically based on x and y tick
+    spacing.
+
     Arguments
     ---------
-        x_units: str or None
-        y_units: str or None
-        anchor: tuple of floats
-        --  bottom right of the bbox (in axis coordinates)
-        x_size: float or None
-        --  Manually set size of x scalebar (or None for automatic sizing)
-        y_size: float or None
-        --  Manually set size of y scalebar (or None for automatic sizing)
-        text_spacing: tuple of floats
-        --  amount to offset labels from respective scalebars (in axis units)
-        bar_space: float
-        --  amount to separate bars from eachother (in axis units)
-        linewidth: numeric
-        --  thickness of the scalebars
-        remove_frame: bool (default False)
-        --  remove the bounding box, axis ticks, etc.
-        omit_x/omit_y: bool (default False)
-        --  skip drawing the x/y scalebar
-        round: bool (default True)
-        --  round units to the nearest integer
-        ax: matplotlib.axes object
-        --  manually specify the axes object to which the scalebar should be added
+    x_units, y_units: str or None
+        Units (e.g. mV, pA, ms) for x and y scalebars.
+    anchor: pair of floats
+        Bottom right of scale bar bbox (in axis coordinates).
+    x_size, y_size: float or None
+        Manually set size of x and y scalebars (or None for automatic sizing).
+    x_label_space, y_label_space: float
+        Offset for x and y scalebar labels (in axis units).
+    bar_space: float >= 0.0
+        Spacing between x and y scalebars (in axis units). Set to zero for the
+        two bars to be joined at the corner.
+    x_on_left: bool, default True
+        Place x scalebar on left of y scalebar. Set to False to place on right
+        instead.
+    linewidth: float, default 3
+        Thickness of scalebars.
+    remove_frame: bool, default True
+        Remove the frame, ticks, etc. from the axis object to which the
+        scalebar is being added. True by default because the scalebars are
+        assumed to be a replacement for the axes.
+    omit_x, omit_y: bool, default False
+        Skip drawing x or y scalebar.f
+    round: bool, default True
+        Round values to the nearest integer. Causes `100.0 pA` to be printed as
+        `100 pA`.
+    usetex: bool, default True
+        Print numbers in LaTeX math mode. Set to False if LaTeX is not being
+        used to render text, or `100 pA` will print as `$100$ pA`.
+    ax: matplotlib.axes object, defaults to current axes
+        Axis to which scalebars should be added.
+
     """
     # Basic input processing.
 
@@ -155,13 +167,17 @@ def add_scalebar(x_units=None, y_units=None, anchor=(0.98, 0.02),
 def hide_border(sides='a', trim=False, ax=None):
     """Remove and/or trim axes borders.
 
+    Most common use is to remove top and right border from matplotlib axes.
+
     Arguments
     ---------
     sides : str `a`, one or more of `rltb`, or `none`
-        Borders to remove.
+        Borders to remove. Use `a` for all, r` for right border, `rl` for right
+        and left, etc.
     trim : bool, default False
         Shorten remaining axes to first and last tick. See `seborn.despine`.
-    ax : matplotlib.axes object
+    ax : matplotlib.axes object, defaults to current axes
+        Hide border of this axes object.
 
     """
     # Check for correct input
@@ -203,8 +219,8 @@ def hide_ticks(ax=None):
 
     Arguments
     ---------
-        ax: matplotlib.axes or None
-        --  Defaults to the current axes if set to `None`.
+    ax: matplotlib.axes, defaults to current axes
+
     """
     if ax is None:
         ax = plt.gca()
@@ -221,12 +237,13 @@ def p_to_string(p):
 
     Arguments
     ---------
-        p: float
-        --  p-value to format.
+    p: float
+        p-value to format.
 
     Returns
     -------
         p-value formatted as a string.
+
     """
     p_rounded = np.round(p, 3)
 
