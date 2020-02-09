@@ -25,6 +25,17 @@ from neo.io import AxonIO
 # OBJECTS FOR LOADING RECORDINGS
 
 class BaseRecordingLoader(object):
+    """Abstract base class for RecordingLoaders.
+
+    Children implement the following methods needed to load
+    electrophysiological recordings of a given format:
+    - _read_data_from_file(file_name)
+    - _get_sampling_interval_in_ms(file_data)
+    - _coerce_to_recording(file_data, sampling_interval)
+
+    These private methods are called by _load_single_file(file_name).
+
+    """
     def __init__(self):
         raise NotImplementedError
 
@@ -68,7 +79,12 @@ class BaseRecordingLoader(object):
 
 
 class ABFLoader(BaseRecordingLoader):
-    """Load recordings in Axon binary format (.abf)."""
+    """Load recordings in Axon binary format (.abf).
+
+    Recordings are loaded by passing a list of file names to the `load()`
+    method.
+
+    """
     def __init__(self):
         pass
 
@@ -114,13 +130,29 @@ class ABFLoader(BaseRecordingLoader):
 # PYTHON OBJECT FOR REPRESENTING RECORDINGS
 
 class Recording(np.ndarray):
-    """Subclass of np.ndarray with additional methods for common ephys tasks.
+    """Thin wrapper of numpy.ndarray with add-ons for common ephys tasks.
 
-    Recording objects are arrays with dimensionality [channel, time, sweep].
+    Recording objects are 3D arrays with dimensionality [channel, time, sweep].
 
-    Extra methods:
-        plot
-        fit_test_pulse
+    Extra attributes
+    ----------------
+    no_channels: int
+        Number of channels in the recording (e.g., current, voltage, etc).
+    no_sweeps, no_timesteps: int
+        Number of sweeps, timesteps in the recording.
+    duration: float
+        Duration of one sweep in ms.
+    dt: float
+        Sampling interval in ms. 1000.0/sampling rate in Hz.
+    time_supp: float 1D array
+        Time support vector for one sweep of the recording in ms. Always starts
+        at zero.
+
+    Extra methods
+    -------------
+    plot
+    fit_test_pulse
+
     """
 
     def __new__(cls, input_array, dt=0.1):
@@ -177,6 +209,11 @@ class Recording(np.ndarray):
 
     @property
     def time_supp(self):
+        """Time support vector for one sweep.
+
+        Gives time from start of sweep in ms. Always starts at zero.
+
+        """
         if getattr(self, '_time_supp', None) is None:
             self._init_time_supp()
         return self._time_supp
