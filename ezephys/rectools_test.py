@@ -2,8 +2,10 @@
 
 import unittest
 
-import ezephys.rectools as rt
+import numpy as np
+import numpy.testing as npt
 
+import ezephys.rectools as rt
 
 class TestRecording(unittest.TestCase):
     """Tests for `rectools.Recording`."""
@@ -13,16 +15,16 @@ class TestRecording(unittest.TestCase):
         test_rec = rt.Recording([[[0, 1, 2]]])
         self.assertTrue(
             isinstance(test_rec, rt.Recording),
-            'Result of `Recording` constructor is not of `Recording` type.'
+            'Result of `Recording` constructor is not of `Recording` type.',
         )
         self.assertTrue(
             isinstance(test_rec[..., 1:], rt.Recording),
-            'Result of slicing `Recording` is not of `Recording` type.'
+            'Result of slicing `Recording` is not of `Recording` type.',
         )
         self.assertTrue(
             isinstance(test_rec[..., 1], rt.Recording),
             'Result of retrieving single element of `Recording` is not of '
-            '`Recording` type.'
+            '`Recording` type.',
         )
 
     def test_dt_preservation(self):
@@ -30,19 +32,123 @@ class TestRecording(unittest.TestCase):
         dt = 0.6767335
         test_rec = rt.Recording([[[0, 1, 2]]], dt=dt)
         self.assertEqual(
-            test_rec.dt, dt,
+            test_rec.dt,
+            dt,
             'Assigned `dt` not equal to attribute `dt`; test code probably '
-            'broken.'
+            'broken.',
         )
         self.assertEqual(
-            test_rec[..., 1:].dt, dt,
-            '`Recording.dt` attribute altered by slicing.'
+            test_rec[..., 1:].dt,
+            dt,
+            '`Recording.dt` attribute altered by slicing.',
         )
         self.assertEqual(
-            test_rec[..., 1].dt, dt,
-            '`dt` attribute altered by retrieving single element of `Recording`.'
+            test_rec[..., 1].dt,
+            dt,
+            '`dt` attribute altered by retrieving single element of `Recording`.',
         )
 
+    def test_no_timesteps_property(self):
+        """Test that no_timesteps reflects number of timesteps in recording."""
+        expected_values = {
+            'no_timesteps': 1000,
+            'no_sweeps': 10,
+            'no_channels': 4,
+        }
+        test_rec = rt.Recording(
+            np.zeros(
+                [
+                    expected_values['no_channels'],
+                    expected_values['no_timesteps'],
+                    expected_values['no_sweeps'],
+                ]
+            ),
+            dt=0.1,
+        )
+        self.assertEqual(
+            test_rec.no_timesteps,
+            expected_values['no_timesteps'],
+            'Expected {} for `no_timesteps` property; got {} instead.'.format(
+                expected_values['no_timesteps'], test_rec.no_timesteps
+            ),
+        )
+
+    def test_no_sweeps_property(self):
+        """Test that no_sweeps reflects number of sweeps in recording."""
+        expected_values = {
+            'no_timesteps': 1000,
+            'no_sweeps': 10,
+            'no_channels': 4,
+        }
+        test_rec = rt.Recording(
+            np.zeros(
+                [
+                    expected_values['no_channels'],
+                    expected_values['no_timesteps'],
+                    expected_values['no_sweeps'],
+                ]
+            ),
+            dt=0.1,
+        )
+        self.assertEqual(
+            test_rec.no_sweeps,
+            expected_values['no_sweeps'],
+            'Expected {} for `no_sweeps` property; got {} instead.'.format(
+                expected_values['no_sweeps'], test_rec.no_sweeps
+            ),
+        )
+
+    def test_no_channels_property(self):
+        """Test that no_channels reflects number of channels in recording."""
+        expected_values = {
+            'no_timesteps': 1000,
+            'no_sweeps': 10,
+            'no_channels': 4,
+        }
+        test_rec = rt.Recording(
+            np.zeros(
+                [
+                    expected_values['no_channels'],
+                    expected_values['no_timesteps'],
+                    expected_values['no_sweeps'],
+                ]
+            ),
+            dt=0.1,
+        )
+        self.assertEqual(
+            test_rec.no_channels,
+            expected_values['no_channels'],
+            'Expected {} for `no_channels` property; got {} instead.'.format(
+                expected_values['no_channels'], test_rec.no_channels
+            ),
+        )
+
+    def test_duration_property(self):
+        """Test that duration reflects number of duration in recording."""
+        recording_dt = 0.1
+        recording_shape = {
+            'no_timesteps': 1000,
+            'no_sweeps': 10,
+            'no_channels': 4,
+        }
+        expected_duration = recording_shape['no_timesteps'] * recording_dt
+        test_rec = rt.Recording(
+            np.zeros(
+                [
+                    recording_shape['no_channels'],
+                    recording_shape['no_timesteps'],
+                    recording_shape['no_sweeps'],
+                ]
+            ),
+            dt=recording_dt,
+        )
+        npt.assert_almost_equal(
+            test_rec.duration,
+            expected_duration,
+            err_msg='Expected {} for `duration` property; got {} instead.'.format(
+                expected_duration, test_rec.duration
+            ),
+        )
 
 if __name__ == '__main__':
     unittest.main()

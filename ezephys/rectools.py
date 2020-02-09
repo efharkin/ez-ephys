@@ -149,6 +149,29 @@ class Recording(np.ndarray):
         self.dt = getattr(obj, 'dt', None)
 
     @property
+    def no_channels(self):
+        """Number of channels in instance."""
+        assert self.ndim == 3
+        return self.shape[0]
+
+    @property
+    def no_sweeps(self):
+        """Number of sweeps in instance."""
+        assert self.ndim == 3
+        return self.shape[2]
+
+    @property
+    def no_timesteps(self):
+        """Number of sweeps in instance."""
+        assert self.ndim == 3
+        return self.shape[1]
+
+    @property
+    def duration(self):
+        """Duration of one sweep in ms."""
+        return self.no_timesteps * self.dt
+
+    @property
     def t_vec(self):
         """Support vector of timestamps."""
         t_vec = np.arange(0, (self.shape[1] - 0.5) * self.dt, self.dt)
