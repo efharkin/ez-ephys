@@ -150,6 +150,30 @@ class TestRecording(unittest.TestCase):
             ),
         )
 
+    def test_time_supp_length_matches_no_timesteps(self):
+        """Ensure time_supp is a valid time support vector for input signal."""
+        for no_timesteps in [5, 578, 993, 300072]:
+            for dt in [0.1, 0.5, 3.0]:
+                test_rec = rt.Recording(np.empty([6, no_timesteps, 1]), dt=dt)
+                self.assertEqual(
+                    len(test_rec.time_supp),
+                    no_timesteps,
+                    'Expected length of time_supp {} to match no_timesteps of '
+                    'input {}.'.format(len(test_rec.time_supp), no_timesteps),
+                )
+
+    def test_time_supp_length_matches_no_timesteps_after_slicing(self):
+        test_rec = rt.Recording(np.empty([3, 4387, 2]), dt=0.4)
+        test_sliced_rec = test_rec[:, 300:557, :]
+        self.assertEqual(
+            len(test_sliced_rec.time_supp),
+            test_sliced_rec.no_timesteps,
+            'Expected length of `time_supp` {} to equal no_timesteps of '
+            'Recording {} after slicing.'.format(
+                len(test_sliced_rec.time_supp), test_sliced_rec.no_timesteps
+            ),
+        )
+
 if __name__ == '__main__':
     unittest.main()
 

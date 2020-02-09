@@ -139,6 +139,8 @@ class Recording(np.ndarray):
 
         # Convert input_array to a np.ndarray, and subsequently to a Recording.
         obj = np.asarray(input_array).view(cls)
+
+        # Initialize attributes.
         obj.dt = dt
 
         return obj
@@ -146,6 +148,8 @@ class Recording(np.ndarray):
     def __array_finalize__(self, obj):
         if obj is None:
             return None
+
+        # Copy time step.
         self.dt = getattr(obj, 'dt', None)
 
     @property
@@ -172,24 +176,13 @@ class Recording(np.ndarray):
         return self.no_timesteps * self.dt
 
     @property
-    def t_vec(self):
-        """Support vector of timestamps."""
-        t_vec = np.arange(0, (self.shape[1] - 0.5) * self.dt, self.dt)
+    def time_supp(self):
+        if getattr(self, '_time_supp', None) is None:
+            self._init_time_supp()
+        return self._time_supp
 
-        assert len(
-            t_vec) == self.shape[1], 'Unequal dimensions error in Recording.t_vec'
-
-        return t_vec
-
-    @property
-    def t_mat(self):
-        """Support array of timestamps with same shape as Recording."""
-        t_mat = np.tile(
-            self.t_vec[np.newaxis, :, np.newaxis], (self.shape[0], 1, self.shape[2]))
-
-        assert t_mat.shape == self.shape, 'Unequal dimensions error in Recording.t_mat'
-
-        return t_mat
+    def _init_time_supp(self):
+        self._time_supp = np.arange(0, self.duration - 0.5 * self.dt, self.dt)
 
     def plot(self, single_sweep=False, downsample=10):
         """Quick inspection of Recording.
