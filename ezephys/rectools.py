@@ -280,6 +280,8 @@ class Recording(np.ndarray):
 
         tau: 3 tuple, optional
         --  Tuple of test pulse start and range over which to calculate tau in *indexes*.
+        plot_tau: bool, default False
+        --  Optionally plot the tau fit.
         """
         ### Inputs ###
 
@@ -289,6 +291,7 @@ class Recording(np.ndarray):
         kwargs.setdefault('V_clamp', True)
         kwargs.setdefault('verbose', True)
         kwargs.setdefault('tau', None)
+        kwargs.setdefault('plot_tau', False)
 
         # Check for correct inputs.
         if not isinstance(baseline, tuple):
@@ -370,24 +373,26 @@ class Recording(np.ndarray):
                 V_copy = deepcopy(self[kwargs['V_chan'], :, :])
                 V_copy = V_copy.mean(axis=1)
 
-                V_copy -= V_copy[slice(*steady_state)].mean()
-                V0 = V_copy[slice(*baseline)].mean()
-
                 pulse_start = kwargs['tau'][0]
-                fitting_range = kwargs['tau'][1:3]
+                fitting_range = kwargs['tau'][-2:]
 
-                t = (
-                    np.arange(
-                        fitting_range[0],
-                        fitting_range[1]) - pulse_start) * self.dt
-                x = np.log(V_copy[slice(*fitting_range)] / V0)
+                p0 = [V_copy[slice(*baseline)].mean(), V_copy[slice(*steady_state)].mean(), 10]
+                p, fitted_pts = self._exponential_optimizer_wrapper(V_copy[slice(*fitting_range)], p0, self.dt)
 
-                mask = np.isnan(x)
+                output['tau'] = p[2]
 
-                tau = - np.sum(x[~mask] * t[~mask]) / \
-                    np.sum(x[~mask] * x[~mask])
-
-                output['tau'] = tau
+                if kwargs['plot_tau']:
+                    plt.figure()
+                    plt.plot(
+                        np.arange(0, (len(V_copy) - 0.5) * self.dt, self.dt), V_copy,
+                        'k-', lw=0.5
+                    )
+                    plt.plot(
+                        np.linspace(fitting_range[0] * self.dt, fitting_range[1] * self.dt, fitted_pts.shape[1]),
+                        fitted_pts[0, :],
+                        'b--'
+                    )
+                    plt.show()
 
             else:
                 raise NotImplementedError(
@@ -404,3 +409,57 @@ class Recording(np.ndarray):
                                                    round(R_a.std())))
 
         return output
+
+    def _exponential_curve(self, p, t):
+        """Three parameter exponential.
+
+        I = (A + C) * exp (-t/tau) + C
+
+        p = [A, C, tau]
+        """
+
+        A = p[0]
+        C = p[1]
+        tau = p[2]
+
+        return (A + C) * np.exp(-t/tau) + C
+
+    def _compute_residuals(self, p, func, Y, X):
+        """Compute residuals of a fitted curve.
+
+        Inputs:
+            p       -- vector of function parameters
+            func    -- a callable function
+            Y       -- real values
+            X       -- vector of points on which to compute fitted values
+
+        Returns:
+            Array of residuals.
+        """
+
+        if len(Y) != len(X):
+            raise ValueError('Y and X must be of the same length.')
+
+        Y_hat = func(p, X)
+
+        return Y - Y_hat
+
+    def _exponential_optimizer_wrapper(self, I, p0, dt=0.1):
+
+        t = np.arange(0, len(I) * dt, dt)[:len(I)]
+
+        p = optimize.least_squares(self._compute_residuals, p0, kwargs={
+        'func': self._exponential_curve,
+        'X': t,
+        'Y': I
+        })['x']
+
+        no_pts = 500
+
+        fitted_points = np.empty((2, no_pts))
+        fitted_points[1, :] = np.linspace(t[0], t[-1], no_pts)
+        fitted_points[0, :] = self._exponential_curve(p, fitted_points[1, :])
+
+        return p, fitted_points
+
+
