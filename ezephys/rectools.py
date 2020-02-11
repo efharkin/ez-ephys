@@ -19,6 +19,7 @@ from copy import deepcopy
 
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy import optimize
 from neo.io import AxonIO
 
 
@@ -118,8 +119,7 @@ class ABFLoader(BaseRecordingLoader):
                 signal = np.squeeze(signal)
 
                 assert len(signal) == sweeps_arr.shape[1], (
-                    'Not all channels in {} are sampled at the same '
-                    'rate.'.format(fname)
+                    'Not all channels are sampled at the same rate.'
                 )
 
                 sweeps_arr[chan_ind, :, sweep_ind] = signal
