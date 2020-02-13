@@ -102,8 +102,11 @@ def add_scalebar(x_units=None, y_units=None, anchor=(0.98, 0.02),
         ax.plot(
             [anchor[0], anchor[0]],
             [anchor[1] + bar_space, anchor[1] + y_length_ax + bar_space],
-            'k-', linewidth=linewidth,
-            clip_on=False, transform=ax.transAxes
+            'k-',
+            linewidth=linewidth,
+            clip_on=False,
+            solid_capstyle='butt',
+            transform=ax.transAxes
         )
 
     # Do x scalebar.
@@ -156,8 +159,11 @@ def add_scalebar(x_units=None, y_units=None, anchor=(0.98, 0.02),
         ax.plot(
             Xx_bar_coords,
             [anchor[1], anchor[1]],
-            'k-', linewidth=linewidth,
-            clip_on=False, transform=ax.transAxes
+            'k-',
+            linewidth=linewidth,
+            clip_on=False,
+            solid_capstyle='butt',
+            transform=ax.transAxes
         )
 
     if remove_frame:
