@@ -383,7 +383,24 @@ class ConvolvedStimulus(BaseStimulus):
         if basis is not None:
             self.generate(basis, dt, kernel_max_len)
 
-    #TODO: Implement __repr__
+    def __repr__(self):
+        """Return repr(self)."""
+        reprstr = (
+            'ez.stimtools.ConvolvedStimulus('
+            'loc={loc}, '
+            'kernel={kernel}, '
+            'basis={basis}, '
+            'dt={dt}, '
+            'label={label}'
+            ')'.format(
+                loc=self.loc,
+                kernel=repr(self.kernel),
+                basis=repr(self.basis),
+                dt=self.dt,
+                label=self.label
+            )
+        )
+        return reprstr
 
     # Methods that should not be reimplemented by derived classes.
     def generate(self, basis, dt, kernel_max_len=None):
