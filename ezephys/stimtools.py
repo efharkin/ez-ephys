@@ -582,10 +582,8 @@ class ArrayKernel(StimulusKernel):
         )
 
     def __str__(self):
-        """Return string representation of ArrayStimulus."""
-        return "ArrayStimulus of size {:.1f}ms x {} sweeps".format(
-            self.duration, self.no_sweeps
-        )
+        """Return string representation of ArrayKernel."""
+        return "ArrayKernel of duration {:.1f}ms".format(self.duration)
 
     def generate(self, duration, dt, front_padded=False):
         """Return the ArrayKernel.
@@ -767,7 +765,7 @@ class MonoexponentialSynapticKernel(StimulusKernel):
             'size_method={size_method}, '
             'label={label}'
             ')'.format(
-                size=self.size, tau_rise=self.tau_rise,
+                size=self.size, tau_decay=self.tau_decay,
                 size_method=self.size_method,
                 label=self.label
             )
@@ -1330,6 +1328,7 @@ class StepStimulus(BaseStimulus):
                 label=self.label,
             )
         )
+        return reprstr
 
     def _generate(self):
         command_tmp = []
@@ -1380,7 +1379,6 @@ class CompoundStimulus(BaseStimulus):
 
         if stimulus is None:
             self.recipe = ''
-            pass
         elif issubclass(type(stimulus), BaseStimulus):
             if isinstance(stimulus, CompoundStimulus):
                 self.recipe = stimulus.recipe
@@ -1393,7 +1391,7 @@ class CompoundStimulus(BaseStimulus):
             if stimulus.dt != dt:
                 warnings.warn(
                     'stimulus.dt = {} not equal to argument dt = {}; using '
-                    '{} from stimulus.'.format(stimulus.dt, dt)
+                    'dt from stimulus.'.format(stimulus.dt, dt)
                 )
             self.dt = stimulus.dt
         else:
