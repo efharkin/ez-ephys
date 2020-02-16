@@ -1539,11 +1539,11 @@ def concatenate(stimuli, dt='auto'):
         del dts
 
     # Concatenate stimuli together.
-    ingredients = []  # List to hold recipe of each stimulus in stimuli.
     if isinstance(stimuli[0], CompoundStimulus):  # Initialize result.
         result = stimuli[0].copy()
     else:
         result = CompoundStimulus(deepcopy(stimuli[0]), dt=dt)
+    ingredients = [result.recipe]  # To hold recipies of all stimuli.
 
     # Concatenate each additional stimulus onto result
     # and build recipe from ingredients.
@@ -1562,8 +1562,13 @@ def concatenate(stimuli, dt='auto'):
     )
 
     # Store result recipe.
+    concatenate_arg_str = ',\n'.join(ingredients)
+    concatenate_arg_str_indented = '\t' + concatenate_arg_str.replace(
+        '\n',
+        '\n\t'
+    )
     result.recipe = '\n'.join(
-        ['concatenate(', '\t' + ',\n\t'.join(ingredients), ')']
+        ['concatenate(', concatenate_arg_str_indented, ')']
     )
 
     return result
