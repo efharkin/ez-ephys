@@ -17,6 +17,31 @@ class TestStepStimulus(unittest.TestCase):
             [-1., -1., 1., 1., 1., 1., 1., 1., 1.]
         )
 
+
+class TestSquareWaveStimulus(unittest.TestCase):
+
+    def test_wave_is_square(self):
+        duration = 1000.
+        timestep = 0.1
+        square_wave = st.SquareWaveStimulus(0.5, 0.5, 1, duration, timestep)
+        first_half_one = np.allclose(
+            square_wave.command[:int(duration / 2. / timestep)], 1.
+        )
+        second_half_zero = np.allclose(
+            square_wave.command[int(duration / 2. / timestep):], 0.
+        )
+        self.assertTrue(
+            first_half_one and second_half_zero,
+            'Square wave is not first half up and second half down.'
+        )
+
+    def test_time_supp_and_command_lengths_match(self):
+        duration = 2000.
+        timestep = 0.1
+        square_wave = st.SquareWaveStimulus(0.5, 0.5, 2, duration, timestep)
+        self.assertEqual(len(square_wave.command), len(square_wave.time_supp))
+
+
 class TestCompoundStimulus(unittest.TestCase):
     """Unit tests for `stimtools.CompoundStimulus` stimulus class."""
 

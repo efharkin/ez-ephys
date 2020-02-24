@@ -1171,6 +1171,193 @@ class SinStimulus(SimpleStimulus):
         self.dt = dt
 
 
+class CosStimulus(SimpleStimulus):
+    """Cosinusoidal stimulus."""
+
+    def __init__(
+        self, mean, amplitude, frequency,
+        duration=None, dt=0.1,
+        label=None
+    ):
+        """Initialize CosStimulus.
+
+        Arguments
+        ---------
+        mean: float
+            Mean of oscillations.
+        amplitude: float
+            Amplitude of oscillations.
+        frequency: float
+            Frequency of oscillations in Hz.
+        duration: float
+            Duration of stimulus in ms.
+        dt: float, default 0.1
+            Timestep of stimulus in ms.
+        label: str
+            Descriptive label.
+
+        """
+        self.label = label
+
+        # Store stimulus parameters.
+        self.mean = mean
+        self.amplitude = amplitude
+        self.frequency = frequency
+
+        # Generate stimulus if optional time params are given.
+        if all([x is not None for x in [duration, dt]]):
+            self.generate(duration, dt)
+
+    def __repr__(self):
+        """Return repr(self)."""
+        reprstr = (
+            'ez.stimtools.CosStimulus('
+            'mean={mean}, '
+            'amplitude={amplitude}, '
+            'frequency={frequency}, '
+            'label={label}'
+            ')'.format(
+                mean=self.mean,
+                amplitude=self.amplitude,
+                frequency=self.frequency,
+                label=self.label
+            )
+        )
+        return reprstr
+
+    def generate(self, duration, dt):
+        """Generate CosStimulus vector.
+
+        Arguments
+        ---------
+        duration: float
+            Duration of stimulus in ms.
+        dt: float
+            Timestep of stimulus in ms.
+
+        Result
+        ------
+        Initializes `command` attribute with cosinusoidal oscillations.
+
+        Side-effects
+        ------------
+        Initializes `time_supp` and `dt` attributes.
+
+        """
+        self.time_supp = np.arange(0, duration - 0.5 * dt, dt)
+
+        # Generate cosine wave.
+        wave = self.mean + self.amplitude * np.cos(
+            2 * np.pi * self.frequency * 1e-3 * self.time_supp  # Convert to Hz
+        )
+
+        # Assign attributes.
+        self.command = wave
+        self.dt = dt
+
+
+class SquareWaveStimulus(SimpleStimulus):
+    """Square wave stimulus."""
+
+    def __init__(
+        self, mean, amplitude, frequency,
+        duration=None, dt=0.1,
+        label=None
+    ):
+        """Initialize SquareWaveStimulus.
+
+        Arguments
+        ---------
+        mean: float
+            Mean of oscillations.
+        amplitude: float
+            Amplitude of oscillations.
+        frequency: float
+            Frequency of oscillations in Hz.
+        duration: float
+            Duration of stimulus in ms.
+        dt: float, default 0.1
+            Timestep of stimulus in ms.
+        label: str
+            Descriptive label.
+
+        """
+        self.label = label
+
+        # Store stimulus parameters.
+        self.mean = mean
+        self.amplitude = amplitude
+        self.frequency = frequency
+
+        # Generate stimulus if optional time params are given.
+        if all([x is not None for x in [duration, dt]]):
+            self.generate(duration, dt)
+
+    def __repr__(self):
+        """Return repr(self)."""
+        reprstr = (
+            'ez.stimtools.SquareWaveStimulus('
+            'mean={mean}, '
+            'amplitude={amplitude}, '
+            'frequency={frequency}, '
+            'label={label}'
+            ')'.format(
+                mean=self.mean,
+                amplitude=self.amplitude,
+                frequency=self.frequency,
+                label=self.label
+            )
+        )
+        return reprstr
+
+    def generate(self, duration, dt):
+        """Generate SquareWaveStimulus vector.
+
+        Arguments
+        ---------
+        duration: float
+            Duration of stimulus in ms.
+        dt: float
+            Timestep of stimulus in ms.
+
+        Result
+        ------
+        Initializes `command` attribute with cosinusoidal oscillations.
+
+        Side-effects
+        ------------
+        Initializes `time_supp` and `dt` attributes.
+
+        """
+        self.time_supp = np.arange(0, duration - 0.5 * dt, dt)
+
+        period = 1e3 / self.frequency
+        num_full_alternations = int(len(self.time_supp) // (period / dt))
+        trailing_duration = duration % period
+
+        # Implementation note: square wave will be constructed with
+        # StepStimulus. The duration of each step will be one half-wave.
+        durations = [period / 2. for i in range(2 * num_full_alternations)]
+        if trailing_duration < period / 2.:
+            durations.append(trailing_duration)
+        else:
+            durations.append(period / 2.)
+            durations.append(trailing_duration % (period / 2.))
+
+        amplitudes = [self.amplitude, -self.amplitude] * num_full_alternations
+        amplitudes.append(self.amplitude)  # For trailing_duration.
+        if trailing_duration >= period / 2.:
+            amplitudes.append(-self.amplitude)
+
+        wave = StepStimulus(durations, amplitudes, dt=dt).command + self.mean
+
+        assert len(wave) == len(self.time_supp), "Length of wave {} does not match time_supp {}".format(len(wave), len(self.time_supp))
+
+        # Assign attributes.
+        self.command = wave
+        self.dt = dt
+
+
 class ChirpStimulus(SimpleStimulus):
     """Sine wave stimulus of exponentially changing frequency."""
 

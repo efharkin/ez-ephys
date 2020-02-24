@@ -6,4 +6,4 @@ from . import stimtools
 
 __author__ = 'Emerson Harkin'
 __email__ = 'emerson.f.harkin at gmail dot com'
-__version__ = '0.3.3'
+__version__ = '0.4.0'
