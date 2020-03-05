@@ -903,6 +903,109 @@ class PoissonProcess(object):
     def duration(self):
         return self.rate.duration
 
+
+class DiscreteJitteredEvent(object):
+    """An event with approximally normally-distributed timing.
+
+    DiscreteJitteredEvent approximates a normal distribution with a specified
+    standard deviation in discrete time.
+
+    """
+    def __init__(self, jitter, dt=0.1):
+        self.jitter = jitter
+        self.dt = dt
+
+    def sample(self, no_samples, truncate_around_mean=None):
+        """Sample the timing of a jittered event.
+
+        Generated events have a binomially-distributed timing, which is
+        approximately normal when the timestep is small and/or jitter is large.
+
+        Arguments
+        ---------
+        truncate_around_mean: pair of floats, or None
+            Window around the mean to truncate the generated event array. Units
+            are multiples of `jitter` (standard deviation).
+
+        Returns
+        -------
+        Indicator matrix where each row is one sample and each column is one
+        time step. Each sample is guaranteed to have exactly one event. Events
+        are stochastically centered.
+
+        """
+        # Sample jittered event timing.
+        event_output = np.zeros((no_samples, self.no_timesteps), dtype=np.int8)
+        event_inds = np.random.binomial(self._binomial_N, self._binomial_p, size=no_samples)
+        for sample_ind, time_ind in zip(range(no_samples), event_inds):
+            event_output[sample_ind, time_ind] = np.int8(1)
+
+        # Optionally, truncate the event array around mean.
+        if truncate_around_mean is not None:
+            try:
+                # Try parsing `truncate_around_mean` as a numeric pair.
+                # Raise a ValueError if it doesn't work.
+                pre_window_width = self._sigma_to_timesteps(truncate_around_mean[0])
+                post_window_width = self._sigma_to_timesteps(truncate_around_mean[1])
+            except TypeError:
+                raise ValueError(
+                    'Expected `truncate_around_mean` to be a pair of floats '
+                    'or None, got {} instead.'.format(truncate_around_mean)
+                )
+            except IndexError:
+                raise ValueError(
+                    'Expected `truncate_around_mean` to be a pair of floats '
+                    'or None, got iterable of length {} instead.'.format(
+                        len(truncate_around_mean)
+                    )
+                )
+            event_output = self._truncate_matrix_around_center_column(
+                event_output,
+                pre_window_width,
+                post_window_width
+            )
+
+        return event_output
+
+    @staticmethod
+    def _truncate_matrix_around_center_column(arr, pre_window_width, post_window_width):
+        if np.ndim(arr) == 1:
+            center_ind = len(arr) // 2
+            return arr[(center_ind - pre_window_width):(center_ind + post_window_width)]
+        elif np.ndim(arr) == 2:
+            center_ind = np.shape(arr)[1] // 2
+            return np.asarray(arr)[:, (center_ind - pre_window_width):(center_ind + post_window_width)]
+        else:
+            raise ValueError(
+                'Argument `arr` must have 1 or 2 dimensions, got {}D array '
+                'instead.'.format(np.ndim(arr))
+            )
+
+    def _sigma_to_timesteps(self, sigma):
+        return int(np.round(float(self.jitter * sigma) / self.dt))
+
+    @property
+    def _binomial_variance(self):
+        sigma_in_timesteps = int(np.round(float(self.jitter) / self.dt))
+        return sigma_in_timesteps ** 2
+
+    @property
+    def _binomial_N(self):
+        return 2 * self._binomial_variance
+
+    @property
+    def _binomial_p(self):
+        return 0.5
+
+    @property
+    def no_timesteps(self):
+        return self._binomial_N
+
+    @property
+    def duration(self):
+        return self.no_timesteps * self.dt
+
+
 # SIMPLE STIMULI
 
 class SimpleStimulus(BaseStimulus):
