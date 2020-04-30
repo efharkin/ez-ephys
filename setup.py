@@ -20,12 +20,17 @@ setuptools.setup(
     keywords='neuroscience,electrophysiology',
     packages=['ezephys'],
     install_requires=[
-        'matplotlib', 'seaborn', 'numpy', 'neo', 'numba'
+        'matplotlib',
+        'seaborn',
+        'numpy',
+        'neo',
+        'numba==0.43.1',
+        'llvmlite==0.28.0',
     ],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3'
-    ]
+        'Programming Language :: Python :: 3',
+    ],
 )
