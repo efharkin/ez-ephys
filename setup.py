@@ -14,9 +14,18 @@ setuptools.setup(
     description='Tools for working with electrophysiological data.',
     license='MIT',
     author='Emerson Harkin',
-    author_email='emerson.f.harkin at gmail dot com',
+    author_email='emerson.f.harkin@gmail.com',
+    url='https://github.com/efharkin/ez-ephys',
+    download_url='https://pypi.org/project/ez-ephys/',
     keywords='neuroscience,electrophysiology',
     packages=['ezephys'],
     install_requires=[
-        'matplotlib', 'seaborn', 'numpy', 'neo', 'numba']
+        'matplotlib', 'seaborn', 'numpy', 'neo', 'numba'
+    ],
+    classifiers=[
+        'Development Status :: 3 - Alpha',
+        'License :: OSI Approved :: MIT License',
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3'
+    ]
 )
