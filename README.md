@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.com/efharkin/ez-ephys.svg?branch=master)](https://travis-ci.com/efharkin/ez-ephys)
+[![Build Status](https://travis-ci.com/efharkin/ez-ephys.svg?branch=master)](https://travis-ci.com/efharkin/ez-ephys) [![PyPI version](https://badge.fury.io/py/ezephys.svg)](https://badge.fury.io/py/ezephys)
 
 # ez-ephys
 
@@ -17,3 +17,7 @@ learning a complicated API.
   `matplotlib` plot
 - `stimtools`: take your experiments beyond current steps with a simple system
   for generating complicated electrophysiological stimuli ([examples](https://github.com/efharkin/ez-ephys/blob/master/examples/stimtools_demo.ipynb))
+
+## Installation
+
+`pip install ezephys`
