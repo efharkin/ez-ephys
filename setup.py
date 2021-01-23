@@ -24,8 +24,7 @@ setuptools.setup(
         'seaborn',
         'numpy',
         'neo',
-        'numba==0.43.1',
-        'llvmlite==0.28.0',
+        'numba'
     ],
     classifiers=[
         'Development Status :: 3 - Alpha',
