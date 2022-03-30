@@ -5,5 +5,5 @@ from . import rectools
 from . import stimtools
 
 __author__ = 'Emerson Harkin'
-__email__ = 'emerson.f.harkin@gmail.com'
-__version__ = '0.4.2'
+__email__ = 'emerson@efharkin.com'
+__version__ = '0.4.3'

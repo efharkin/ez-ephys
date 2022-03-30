@@ -1,0 +1,8 @@
+matplotlib
+seaborn
+numpy
+neo
+numba; python_version >= 3.0.0
+numba == 0.43.1; python_version == 2.7.*
+llvmlite; python_version >= 3.0.0
+llvmlite >= 0.28, <= 0.31; python_version == 2.7.*
